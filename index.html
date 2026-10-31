@@ -1,21 +1,115 @@
 <!doctype html>
-<html lang="en"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f7f8fb"><meta name="description" content="Private, offline AI writing and prompt assistant.">
-<link rel="manifest" href="%BASE_URL%manifest.webmanifest"><link rel="icon" type="image/svg+xml" href="%BASE_URL%icon.svg">
-<title>ProText AI</title></head><body>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f7f8fb">
+    <meta name="description" content="Private, offline AI writing and prompt assistant.">
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%icon.svg">
+    <title>ProText AI</title></head>
+<body>
 <div class="app-shell">
-<header class="topbar"><a class="brand" href="#home" aria-label="ProText AI home"><span class="brand-mark">P</span><span><b>ProText AI</b><small>Private writing studio</small></span></a><div class="top-actions"><span class="network"><i id="networkDot"></i><span id="networkLabel">Checking</span></span><button id="menuButton" class="icon-button" aria-label="Open menu">☰</button></div></header>
-<div id="menuPanel" class="menu-panel" hidden><button id="closeMenu" class="menu-close">×</button><button data-feature="rewrite" class="menu-link active">✦ <span><b>Improve text</b><small>Polish everyday writing</small></span></button><button data-feature="prompt" class="menu-link">⌘ <span><b>AI Prompt Enhancer</b><small>Create concise prompts</small></span></button><button data-feature="history" class="menu-link">◷ <span><b>Saved rewrites</b><small>Your on-device history</small></span></button><div class="menu-foot">More tools can be added here later.</div></div>
-<main><section class="page-heading"><div class="eyebrow">YOUR PRIVATE AI WORKSPACE</div><h1 id="pageTitle">Improve your writing</h1><p id="pageSubtitle">Clear, polished writing that keeps your meaning.</p></section>
-<section id="rewriteView" class="feature-view">
-<div class="field-card"><div class="field-head"><label for="rawText">Your text</label><button id="clearRewrite" class="quiet-button">Clear</button></div><textarea id="rawText" placeholder="Paste or type your rough message…"></textarea><div class="field-foot"><span id="rewriteCount">0 characters</span><span>Names and facts stay unchanged</span></div></div>
-<div class="field-card options-card"><label for="mode">Writing style</label><select id="mode"><option>Professional</option><option>Formal</option><option value="Email">Business email</option><option value="Polite">Polite and respectful</option><option>Concise</option><option>Executive</option><option>Friendly Professional</option><option value="Grammar Only">Grammar only</option></select><button id="rewriteBtn" class="primary generate-btn">✦ &nbsp; Improve text</button></div>
-</section>
-<section id="promptView" class="feature-view" hidden><div class="feature-tip"><span class="tip-icon">⌘</span><span><b>From rough idea to ready-to-use prompt</b><small>Balanced token efficiency: concise, without losing important requirements.</small></span></div><div class="field-card"><div class="field-head"><label for="promptRaw">Your problem or idea</label><button id="clearPrompt" class="quiet-button">Clear</button></div><textarea id="promptRaw" placeholder="Describe what you want an AI tool to do, the context, and any requirements…"></textarea><div class="field-foot"><span id="promptCount">0 characters</span><span>Works across AI tools</span></div></div><div class="field-card options-card"><button id="enhanceBtn" class="primary generate-btn">⌘ &nbsp; Enhance prompt</button></div></section>
-<section id="historyView" hidden><div class="field-card"><div class="field-head"><b>Saved rewrites</b><button id="clearHistoryBtn" class="quiet-button">Clear history</button></div><div id="historyList" class="history-list"></div></div></section>
-<div id="loadingLine" class="loading-line" hidden><div class="spinner"></div><div><b id="loadingText">Preparing private AI…</b><div class="progress-track"><div id="loadingFill"></div></div></div></div>
-<div id="notice" class="notice" role="status" hidden></div>
-<section id="resultCard" class="result-card" hidden><div class="result-head"><div><span class="eyebrow">YOUR RESULT</span><h2 id="resultLabel">Improved text</h2></div><div class="result-tools"><button id="copyBtn" class="icon-button tool-button" aria-label="Copy result" disabled title="Copy">▢</button><button id="regenerateBtn" class="icon-button tool-button" aria-label="Regenerate result" disabled title="Regenerate">↻</button><button id="saveBtn" class="icon-button tool-button" aria-label="Save rewrite" disabled title="Save">♡</button></div></div><textarea id="resultText" readonly aria-label="Generated result"></textarea></section>
-<div id="emptyResult" class="empty-result"><span>✧</span><b>Your result will appear here</b><small>Enter your text above to get started.</small></div>
-</main><footer><span>🔒</span> Runs on your device. No text is sent to a cloud AI service.</footer></div><script type="module" src="%BASE_URL%src/main.js"></script></body></html>
+    <header class="topbar"><a class="brand" href="#home" aria-label="ProText AI home"><span
+            class="brand-mark">P</span><span><b>ProText AI</b><small>Private writing studio</small></span></a>
+        <div class="top-actions"><span class="network"><i id="networkDot"></i><span
+                id="networkLabel">Checking</span></span>
+            <button id="menuButton" class="icon-button" aria-label="Open menu">☰</button>
+        </div>
+    </header>
+    <div id="menuPanel" class="menu-panel" hidden>
+        <button id="closeMenu" class="menu-close">×</button>
+        <button data-feature="rewrite" class="menu-link active">✦ <span><b>Improve text</b><small>Polish everyday writing</small></span>
+        </button>
+        <button data-feature="prompt" class="menu-link">⌘
+            <span><b>AI Prompt Enhancer</b><small>Create concise prompts</small></span></button>
+        <button data-feature="history" class="menu-link">◷
+            <span><b>Saved rewrites</b><small>Your on-device history</small></span></button>
+        <div class="menu-foot">More tools can be added here later.</div>
+    </div>
+    <main>
+        <section class="page-heading">
+            <div class="eyebrow">YOUR PRIVATE AI WORKSPACE</div>
+            <h1 id="pageTitle">Improve your writing</h1>
+            <p id="pageSubtitle">Clear, polished writing that keeps your meaning.</p></section>
+        <section id="rewriteView" class="feature-view">
+            <div class="field-card">
+                <div class="field-head"><label for="rawText">Your text</label>
+                    <button id="clearRewrite" class="quiet-button">Clear</button>
+                </div>
+                <textarea id="rawText" placeholder="Paste or type your rough message…"></textarea>
+                <div class="field-foot"><span
+                        id="rewriteCount">0 characters</span><span>Names and facts stay unchanged</span></div>
+            </div>
+            <div class="field-card options-card"><label for="mode">Writing style</label><select id="mode">
+                <option>Professional</option>
+                <option>Formal</option>
+                <option value="Email">Business email</option>
+                <option value="Polite">Polite and respectful</option>
+                <option>Concise</option>
+                <option>Executive</option>
+                <option>Friendly Professional</option>
+                <option value="Grammar Only">Grammar only</option>
+            </select>
+                <button id="rewriteBtn" class="primary generate-btn">✦ &nbsp; Improve text</button>
+            </div>
+        </section>
+        <section id="promptView" class="feature-view" hidden>
+            <div class="feature-tip"><span
+                    class="tip-icon">⌘</span><span><b>From rough idea to ready-to-use prompt</b><small>Balanced token efficiency: concise, without losing important requirements.</small></span>
+            </div>
+            <div class="field-card">
+                <div class="field-head"><label for="promptRaw">Your problem or idea</label>
+                    <button id="clearPrompt" class="quiet-button">Clear</button>
+                </div>
+                <textarea id="promptRaw"
+                          placeholder="Describe what you want an AI tool to do, the context, and any requirements…"></textarea>
+                <div class="field-foot"><span id="promptCount">0 characters</span><span>Works across AI tools</span>
+                </div>
+            </div>
+            <div class="field-card options-card">
+                <button id="enhanceBtn" class="primary generate-btn">⌘ &nbsp; Enhance prompt</button>
+            </div>
+        </section>
+        <section id="historyView" hidden>
+            <div class="field-card">
+                <div class="field-head"><b>Saved rewrites</b>
+                    <button id="clearHistoryBtn" class="quiet-button">Clear history</button>
+                </div>
+                <div id="historyList" class="history-list"></div>
+            </div>
+        </section>
+        <div id="loadingLine" class="loading-line" hidden>
+            <div class="spinner"></div>
+            <div><b id="loadingText">Preparing private AI…</b>
+                <div class="progress-track">
+                    <div id="loadingFill"></div>
+                </div>
+            </div>
+        </div>
+        <div id="notice" class="notice" role="status" hidden></div>
+        <section id="resultCard" class="result-card" hidden>
+            <div class="result-head">
+                <div><span class="eyebrow">YOUR RESULT</span>
+                    <h2 id="resultLabel">Improved text</h2></div>
+                <div class="result-tools">
+                    <button id="copyBtn" class="icon-button tool-button" aria-label="Copy result" disabled title="Copy">
+                        ▢
+                    </button>
+                    <button id="regenerateBtn" class="icon-button tool-button" aria-label="Regenerate result" disabled
+                            title="Regenerate">↻
+                    </button>
+                    <button id="saveBtn" class="icon-button tool-button" aria-label="Save rewrite" disabled
+                            title="Save">♡
+                    </button>
+                </div>
+            </div>
+            <textarea id="resultText" readonly aria-label="Generated result"></textarea></section>
+        <div id="emptyResult" class="empty-result"><span>✧</span><b>Your result will appear here</b><small>Enter your
+            text above to get started.</small></div>
+    </main>
+    <footer><span>🔒</span> Runs on your device. No text is sent to a cloud AI service.</footer>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
