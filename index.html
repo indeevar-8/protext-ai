@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <meta name="description" content="Private, offline AI writing assistant.">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <title>ProText AI</title>
+  <script type="module" crossorigin src="/protext-ai/assets/index-CYJ5Wfh8.js"></script>
+  <link rel="stylesheet" crossorigin href="/protext-ai/assets/index-Bbbgtjxp.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-mark">P</div>
+      <div class="brand-copy"><strong>ProText AI</strong><span>Your private writing assistant</span></div>
+      <span id="connectionPill" class="pill">Checking…</span>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div class="eyebrow">WRITE WITH CONFIDENCE</div>
+        <h1>Make every message<br><em>sound professional.</em></h1>
+        <p>Paste your rough text. Get a clear, polished version while keeping your original meaning.</p>
+      </section>
+
+      <section class="panel">
+        <div class="section-head"><label for="rawText">Your text</label><button id="clearBtn" class="text-button" type="button">Clear</button></div>
+        <textarea id="rawText" placeholder="Type or paste your message here…"></textarea>
+        <div class="input-meta"><span id="charCount">0 characters</span><span>Keep names, dates and facts intact</span></div>
+      </section>
+
+      <section class="panel compact">
+        <div class="section-head"><label for="mode">Writing style</label></div>
+        <select id="mode">
+          <option value="Professional">Professional</option>
+          <option value="Formal">Formal</option>
+          <option value="Email">Business email</option>
+          <option value="Polite">Polite and respectful</option>
+          <option value="Concise">Concise</option>
+          <option value="Executive">Executive</option>
+          <option value="Friendly Professional">Friendly professional</option>
+          <option value="Grammar Only">Grammar only</option>
+        </select>
+        <button id="rewriteBtn" class="primary" type="button">✦ &nbsp; Professionalize text</button>
+        <div id="status" class="status" role="status">Checking whether local AI is supported…</div>
+        <div id="progressWrap" class="progress-wrap" hidden>
+          <div class="progress-track"><div id="progressBar"></div></div>
+          <div id="progressLabel">Preparing local AI…</div>
+        </div>
+      </section>
+
+      <section class="panel result-panel">
+        <div class="section-head"><label for="resultText">Professional version</label><span class="local-tag">ON-DEVICE AI</span></div>
+        <div id="emptyState" class="empty-state"><div class="sparkle">✧</div><strong>Your polished text will appear here</strong><span>Your text stays on this device.</span></div>
+        <textarea id="resultText" placeholder="Your rewritten text will appear here…" readonly></textarea>
+        <div class="result-actions">
+          <button id="copyBtn" class="secondary" type="button" disabled>Copy text</button>
+          <button id="saveBtn" class="secondary" type="button" disabled>Save to history</button>
+        </div>
+      </section>
+
+      <section class="panel history-panel">
+        <div class="section-head"><label>Recent rewrites</label><button id="clearHistoryBtn" class="text-button" type="button">Clear history</button></div>
+        <div id="historyList" class="history-list"><div class="history-empty">Your saved rewrites will appear here.</div></div>
+      </section>
+
+      <section class="privacy-note"><span>🔒</span><span><strong>Private by design.</strong> Once the app and model are downloaded, rewriting runs on your iPhone without sending your text to a server.</span></section>
+    </main>
+    <footer>PROTEXT AI · PERSONAL OFFLINE WRITING ASSISTANT</footer>
+  </div>
+</body>
+</html>
