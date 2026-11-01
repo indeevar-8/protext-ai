@@ -195,73 +195,78 @@ function isTaskExecution(text) {
 }
 
 // Local fallback that preserves original requirements.
+
 function fallbackPrompt(raw) {
-  let text = raw.trim().replace(/\s+/g, " ");
+  const original = raw.trim().replace(/\s+/g, " ");
 
+  let text = original
+    .replace(
+      /^(?:please\s+)?(?:i would like to|i'd like to|i want to|i need to|can you|could you|please help me|help me)\s+/i,
+      ""
+    )
+    .trim();
+
+  // Handle requests to write an email.
+  if (/^(?:write|draft|create|send)\s+(?:an?\s+)?(?:\w+\s+){0,5}email\b/i.test(text)) {
+    text = text.replace(
+      /^(?:write|draft|create|send)\b/i,
+      "Draft"
+    );
+  }
+
+  // Handle "asking for leave" phrasing.
   text = text.replace(
-    /^(?:please\s+)?(?:i(?:'d| would) like (?:you )?to|i want (?:you )?to|i need (?:you )?to|can you|could you|please help me to|please help me|help me to|help me)\s+/i,
-    ""
+    /\basking for\b/gi,
+    "requesting"
   );
 
   text = text.replace(
-    /^(?:please\s+)?(?:write|draft|create|build|generate|make)\s+/i,
-    (m) => m.trim().replace(/^please\s+/i, "") + " "
-  );
-
-  text = text.replace(
-    /^to\s+(?=(?:write|draft|create|build|generate|make)\b)/i,
-    ""
-  );
-
-  text = text.replace(
-    /^i\s+(?:am\s+)?(?:trying|looking)\s+to\s+/i,
-    ""
-  );
-
-  text = text.replace(
-    /^a\s+polite\s+email\b/i,
-    "Draft a polite email"
-  );
-
-  text = text.replace(
-    /^write\s+a\s+polite\s+email\b/i,
-    "Draft a polite email"
-  );
-
-  // Convert an email request into a prompt.
-  text = text.replace(
-    /^write\s+(?=an?\s+.*\bemail\b)/i,
-    "Draft "
+    /\basking (?:my|the|a) manager for\b/gi,
+    "requesting from my manager"
   );
 
   const actionVerb =
-    /^(?:write|draft|create|build|generate|make|explain|analyze|summarize|compare|design|develop|list|translate|review|edit|provide|describe|implement|prepare|suggest|outline|convert|extract|plan|research)\b/i;
+    /^(?:write|draft|create|build|generate|explain|analyze|summarize|compare|design|develop|list|translate|review|edit|provide|describe|implement|prepare|outline|convert|extract|plan)\b/i;
 
   if (!actionVerb.test(text)) {
-    text =
-      "Create an appropriate response to this request: " +
-      raw.trim().replace(/\s+/g, " ");
+    text = "Write a response to this request: " + original;
   }
 
   return (
     text.charAt(0).toUpperCase() +
-    text.slice(1).replace(/[.?!]*$/, ".")
+    text.slice(1).replace(/[.!?]*$/, ".")
+  );
+}
+
+function looksLikeEmailDraft(text) {
+  const value = text.trim();
+
+  return (
+    /^(?:subject\s*:|dear\s+|hello\s+|hi\s+)/i.test(value) ||
+    /\b(?:i am writing to|i'm writing to|i would like to request|i kindly request)\b/i.test(value) ||
+    /\b(?:thank you for your consideration|looking forward to your response)\b/i.test(value) ||
+    /\b(?:sincerely|best regards|kind regards)\b/i.test(value)
   );
 }
 
 function transformPromptOutput(raw, generated) {
   const candidate = cleanPromptOutput(generated);
 
-  const actionVerb =
-    /^(?:write|draft|create|build|generate|make|explain|analyze|summarize|compare|design|develop|list|translate|review|edit|provide|describe|implement|prepare|suggest|outline|convert|extract|plan|research)\b/i;
+  const startsWithInstruction =
+    /^(?:write|draft|create|build|generate|make|explain|analyze|summarize|compare|design|develop|list|translate|review|edit|provide|describe|implement|prepare|suggest|outline|convert|extract|plan)\b/i;
 
   const valid =
     candidate.length > 0 &&
+    startsWithInstruction.test(candidate) &&
     !isTaskExecution(candidate) &&
-    containsAllAnchors(raw, candidate) &&
-    actionVerb.test(candidate);
+    !looksLikeEmailDraft(candidate) &&
+    containsAllAnchors(raw, candidate);
 
-  return valid ? candidate : fallbackPrompt(raw);
+  if (valid) {
+    return candidate;
+  }
+
+  return fallbackPrompt(raw);
 }
 
 function showResult(text, label) {
