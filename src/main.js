@@ -129,20 +129,27 @@ function rewritePrompt(raw, mode) {
   );
 }
 
+
 function promptPrompt(raw) {
-  return (
-    "Transform the following idea into a compact, precise, " +
-    "ready-to-use ENGLISH prompt for another AI. " +
-    "Preserve the task, essential context, inputs, constraints, " +
-    "and required output. " +
-    "Remove filler, repetition, greetings and generic role-play. " +
-    "Prefer direct instructions and compact formatting. " +
-    "Do not omit essential requirements merely to shorten the prompt. " +
-    "Do not invent facts. " +
-    "Use a short placeholder only when an essential detail is missing. " +
-    "Output ONLY the final prompt, without commentary or token count.\n\n" +
-    "IDEA:\n" + raw
-  );
+  return [
+    "Convert the user's idea into a concise, effective English prompt",
+    "for another AI model.",
+    "",
+    "RULES:",
+    "1. Preserve the exact objective and all essential requirements.",
+    "2. Keep important context, inputs, constraints, and output format.",
+    "3. Remove filler, repetition, greetings, and unnecessary wording.",
+    "4. Use clear, direct, actionable language.",
+    "5. Do not add requirements, technologies, or assumptions.",
+    "6. For simple tasks, produce one compact sentence.",
+    "7. For complex tasks, use short structured instructions.",
+    "8. Avoid generic phrases such as 'Act as an expert'.",
+    "9. Use English only.",
+    "10. Return only the optimized prompt.",
+    "",
+    "USER IDEA:",
+    raw
+  ].join("\n");
 }
 
 function showResult(text, label) {
