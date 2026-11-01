@@ -1,34 +1,153 @@
 
-const CACHE = "protext-shell-v3";
+const VERSION = "v4";
+const CACHE = `protext-shell-${VERSION}`;
+const CACHE_PREFIX = "protext-shell-";
+
 const BASE = new URL("./", self.registration.scope);
 
+const HOME = new URL("./", BASE).href;
+const INDEX = new URL("index.html", BASE).href;
+
 const SHELL = [
-  new URL("./", BASE).href,
-  new URL("index.html", BASE).href,
+  HOME,
+  INDEX,
   new URL("manifest.webmanifest", BASE).href,
   new URL("icon.svg", BASE).href
 ];
 
+// Only manage ProText's application-shell caches.
+// Never delete WebLLM, tokenizer, or other caches.
+
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(SHELL))
-  );
-  self.skipWaiting();
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+
+    // Fetch fresh files when installing a new version.
+    await Promise.all(
+      SHELL.map(async (url) => {
+        const response = await fetch(
+          new Request(url, { cache: "reload" })
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `App shell download failed: ${url}`
+          );
+        }
+
+        await cache.put(url, response);
+      })
+    );
+
+    // Precache Vite's hashed JS/CSS assets so the
+    // newly installed version can start offline.
+    const htmlResponse = await cache.match(INDEX);
+    const html = await htmlResponse.text();
+
+    const assetPaths = new Set();
+
+    const pattern =
+      /(?:src|href)=["']([^"']+\.(?:js|css)(?:\?[^"']*)?)["']/gi;
+
+    for (const match of html.matchAll(pattern)) {
+      const url = new URL(match[1], INDEX);
+
+      if (
+        url.origin === self.location.origin &&
+        url.pathname.startsWith(BASE.pathname)
+      ) {
+        assetPaths.add(url.href);
+      }
+    }
+
+    await Promise.all(
+      [...assetPaths].map(async (url) => {
+        const response = await fetch(
+          new Request(url, { cache: "reload" })
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `App asset download failed: ${url}`
+          );
+        }
+
+        await cache.put(url, response);
+      })
+    );
+  })());
 });
 
+// Delete obsolete shell caches only after
+// the new service worker activates.
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) =>
-            key.startsWith("protext-shell-") && key !== CACHE
-          )
-          .map((key) => caches.delete(key))
-      )
-    ).then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+
+    await Promise.all(
+      keys
+        .filter(
+          (key) =>
+            key.startsWith(CACHE_PREFIX) &&
+            key !== CACHE
+        )
+        .map((key) => caches.delete(key))
+    );
+
+    await self.clients.claim();
+  })());
 });
+
+// Activate an installed update only when the
+// application tells us it is safe to do so.
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
+// Return cached content when offline.
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request);
+
+    if (response.ok) {
+      const cache = await caches.open(CACHE);
+      await cache.put(request, response.clone());
+    }
+
+    return response;
+  } catch (error) {
+    const cached = await caches.match(request);
+
+    if (cached) return cached;
+
+    if (request.mode === "navigate") {
+      const fallback = await caches.match(INDEX);
+
+      if (fallback) return fallback;
+    }
+
+    throw error;
+  }
+}
+
+// Hashed Vite assets can safely use cache-first:
+// a changed asset receives a different filename.
+async function cacheFirst(request) {
+  const cached = await caches.match(request);
+
+  if (cached) return cached;
+
+  const response = await fetch(request);
+
+  if (response.ok) {
+    const cache = await caches.open(CACHE);
+    await cache.put(request, response.clone());
+  }
+
+  return response;
+}
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
@@ -36,42 +155,22 @@ self.addEventListener("fetch", (event) => {
 
   if (
     request.method !== "GET" ||
-    url.origin !== self.location.origin
+    url.origin !== self.location.origin ||
+    !url.pathname.startsWith(BASE.pathname)
   ) {
     return;
   }
 
+  const isHashedAsset =
+    /\/assets\/[^/]+\.(?:js|css)$/i.test(
+      url.pathname
+    );
+
+  // HTML and other app files prefer the network.
+  // Hashed assets prefer the local cache.
   event.respondWith(
-    caches.match(request).then(async (cached) => {
-      if (cached) return cached;
-
-      try {
-        const response = await fetch(request);
-
-        if (response.ok) {
-          // Clone immediately, before returning the response.
-          const copy = response.clone();
-
-          event.waitUntil(
-            caches.open(CACHE)
-              .then((cache) => cache.put(request, copy))
-              .catch((error) => {
-                console.warn("Cache write failed:", error);
-              })
-          );
-        }
-
-        return response;
-      } catch (error) {
-        if (request.mode === "navigate") {
-          const fallback = await caches.match(
-            new URL("index.html", BASE).href
-          );
-          if (fallback) return fallback;
-        }
-
-        throw error;
-      }
-    })
+    isHashedAsset
+      ? cacheFirst(request)
+      : networkFirst(request)
   );
 });

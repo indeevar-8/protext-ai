@@ -823,6 +823,11 @@ async function generate(kind, again = false) {
         button.disabled = false;
       }
     );
+
+    // Apply any pending app update after generation.
+    if (typeof window.protextFinishUpdate === "function") {
+      window.protextFinishUpdate();
+    }
   }
 }
 
@@ -1097,15 +1102,118 @@ if (!navigator.gpu) {
 // SERVICE WORKER
 // =====================================
 
+
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("./sw.js")
-      .catch((error) => {
-        console.warn(
-          "Service worker registration failed:",
-          error
+  let pendingReload = false;
+  let updateRegistration = null;
+
+  function generationIsBusy() {
+    return !$("loadingLine").hidden;
+  }
+
+  function reloadWhenSafe() {
+    if (generationIsBusy()) {
+      pendingReload = true;
+      return;
+    }
+
+    pendingReload = false;
+    window.location.reload();
+  }
+
+  function activateWaitingUpdate(registration) {
+    if (!registration?.waiting) return;
+
+    if (generationIsBusy()) {
+      pendingReload = true;
+      updateRegistration = registration;
+      return;
+    }
+
+    registration.waiting.postMessage({
+      type: "SKIP_WAITING"
+    });
+  }
+
+  // Called when a generation finishes.
+  window.protextFinishUpdate = () => {
+    if (!pendingReload) return;
+
+    if (updateRegistration?.waiting) {
+      pendingReload = false;
+      activateWaitingUpdate(updateRegistration);
+    } else {
+      reloadWhenSafe();
+    }
+  };
+
+  window.addEventListener("load", async () => {
+    try {
+      const hadController =
+        Boolean(navigator.serviceWorker.controller);
+
+      const registration =
+        await navigator.serviceWorker.register(
+          "./sw.js",
+          { updateViaCache: "none" }
+        );
+
+      updateRegistration = registration;
+
+      navigator.serviceWorker.addEventListener(
+        "controllerchange",
+        () => {
+          // Avoid reloading on first installation.
+          if (hadController) {
+            reloadWhenSafe();
+          }
+        }
+      );
+
+      if (registration.waiting) {
+        activateWaitingUpdate(registration);
+      }
+
+      registration.addEventListener(
+        "updatefound",
+        () => {
+          const installing = registration.installing;
+
+          if (!installing) return;
+
+          installing.addEventListener(
+            "statechange",
+            () => {
+              if (
+                installing.state === "installed" &&
+                registration.waiting
+              ) {
+                activateWaitingUpdate(registration);
+              }
+            }
+          );
+        }
+      );
+
+      // Check once at startup when online.
+      if (navigator.onLine) {
+        await registration.update();
+      }
+
+      window.addEventListener("online", () => {
+        registration.update().catch(
+          (error) => console.warn(
+            "Update check failed:",
+            error
+          )
         );
       });
+
+    } catch (error) {
+      console.warn(
+        "Service worker setup failed:",
+        error
+      );
+    }
   });
 }
