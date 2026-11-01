@@ -199,6 +199,21 @@ function isTaskExecution(text) {
 function fallbackPrompt(raw) {
   const original = raw.trim().replace(/\s+/g, " ");
 
+  // Convert leave-request wording into an email-writing prompt.
+  const leaveMatch = original.match(
+    /^request\s+(.+?)\s+from\s+(my|the|a)\s+manager\.?$/i
+  );
+
+  if (leaveMatch && /\bleave\b/i.test(leaveMatch[1])) {
+    return (
+      "Draft a polite email to " +
+      leaveMatch[2].toLowerCase() +
+      " manager requesting " +
+      leaveMatch[1].replace(/[.!?]+$/, "") +
+      "."
+    );
+  }
+
   let text = original
     .replace(
       /^(?:please\s+)?(?:i would like to|i'd like to|i want to|i need to|can you|could you|please help me|help me)\s+/i,
