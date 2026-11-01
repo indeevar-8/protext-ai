@@ -13,8 +13,8 @@
     <link rel="icon" type="image/svg+xml" href="./icon.svg">
 
     <title>ProText AI</title>
-  <script type="module" crossorigin src="/protext-ai/assets/index-DQFBaGS4.js"></script>
-  <link rel="stylesheet" crossorigin href="/protext-ai/assets/index-DXaNcfxq.css">
+  <script type="module" crossorigin src="/protext-ai/assets/index-CESBKkGS.js"></script>
+  <link rel="stylesheet" crossorigin href="/protext-ai/assets/index-CSCEqGJh.css">
 </head>
 
 <body>
@@ -113,6 +113,11 @@
 
                 <textarea id="rawText"
                           placeholder="Paste or type your rough message…"></textarea>
+                <button type="button"
+                        class="clear-draft-btn"
+                        data-draft="rewrite">
+                    Clear draft
+                </button>
 
                 <div class="field-foot">
                     <span id="rewriteCount">0 characters</span>
@@ -170,7 +175,11 @@
 
                 <textarea id="promptRaw"
                           placeholder="Describe what you want an AI tool to do, the context, and any requirements…"></textarea>
-
+                <button type="button"
+                        class="clear-draft-btn"
+                        data-draft="prompt">
+                    Clear draft
+                </button>
                 <div class="field-foot">
                     <span id="promptCount">0 characters</span>
                     <span>Works across AI tools</span>

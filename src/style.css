@@ -687,3 +687,21 @@ footer {
     transition-duration: 0.01ms !important;
   }
 }
+
+.clear-draft-btn {
+  display: block;
+  margin: 8px 0 12px auto;
+  padding: 6px 10px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.clear-draft-btn:hover {
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.08);
+}
