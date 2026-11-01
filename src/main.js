@@ -131,23 +131,22 @@ function rewritePrompt(raw, mode) {
 
 function promptPrompt(raw) {
   return [
-    "You are editing a prompt, not executing a task.",
-    "Rewrite the INPUT as a concise instruction for another AI.",
-    "",
-    "MANDATORY:",
-    "- Preserve every specific detail from the input.",
-    "- Keep people, quantities, dates, timeframes, conditions,",
-    "  technologies, constraints, and required outputs.",
-    "- Shorten wording only when meaning stays unchanged.",
-    "- Do not replace specific requirements with generic wording.",
-    "- Do not perform the task described in the input.",
-    "- Do not write code, emails, answers, or explanations.",
-    "- Return only the optimized English prompt.",
+    "Convert INPUT into a concise command for another AI.",
+    "Do not execute the task or give advice about doing it.",
+    "Start with an action verb such as Write, Draft, Create,",
+    "Explain, Analyze, Summarize, or Compare.",
+    "Preserve ALL specific details, including names, people,",
+    "numbers, durations, dates, timeframes, and constraints.",
+    "Do not omit details to make the prompt shorter.",
+    "Remove only filler, repetition, and unnecessary wording.",
+    "Do not invent missing information.",
+    "Return only the final English prompt.",
+    "No explanations, notes, or additional text.",
     "",
     "INPUT:",
     raw,
     "",
-    "OPTIMIZED PROMPT:"
+    "PROMPT:"
   ].join("\n");
 }
 
