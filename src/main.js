@@ -167,6 +167,37 @@ function cleanPromptOutput(text) {
   return result.trim();
 }
 
+function isTaskExecution(text, raw) {
+  const output = text.trim();
+
+  // Detect a generated email or letter.
+  if (/^(subject\s*:|dear\s+|hi\s+|hello\s+|to\s*:)/i.test(output)) {
+    return true;
+  }
+
+  // Detect common email signatures.
+  if (/\n\s*(sincerely|best regards|kind regards|yours truly)[,\s]/i.test(output)) {
+    return true;
+  }
+
+  // Detect generated code blocks.
+  if (/```/.test(output)) {
+    return true;
+  }
+
+  // Detect some direct code output.
+  if (/^(import\s+|from\s+\w+\s+import|def\s+|function\s+|class\s+)/m.test(output)) {
+    return true;
+  }
+
+  // Detect explanatory commentary.
+  if (/^(here is|here's|this prompt|this version)/i.test(output)) {
+    return true;
+  }
+
+  return false;
+}
+
 function showResult(text, label) {
   lastOutput = text;
 
@@ -279,6 +310,13 @@ async function generate(kind, again = false) {
     if (!out) {
       throw new Error(
         "The model returned an empty result. Please try again."
+      );
+    }
+
+    if (kind === "prompt" && isTaskExecution(out, raw)) {
+      throw new Error(
+        "The AI generated the task instead of optimizing the prompt. " +
+        "Please tap Enhance Prompt to try again."
       );
     }
 
