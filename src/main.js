@@ -670,77 +670,156 @@ function looksLikeEmailDraft(text) {
 // TOKEN-AWARE PROMPT SELECTION
 // =====================================
 
+
 async function transformPromptOutput(raw, generated) {
   const original = raw.trim().replace(/\s+/g, " ");
-  const aiCandidate = cleanPromptOutput(generated);
-  const fallback = fallbackPrompt(raw);
 
   const actionVerb =
     /^(?:write|draft|create|build|generate|make|explain|analyze|summarize|compare|design|develop|list|translate|review|edit|provide|describe|implement|prepare|suggest|outline|convert|extract|plan|research|fix|debug|optimize|calculate|identify|validate|remove|add|update|test)\b/i;
 
-  function isAcceptable(candidate) {
-    if (!candidate || !candidate.trim()) return false;
+  const normalize = (text) =>
+    cleanPromptOutput(text).replace(/\s+/g, " ").trim();
 
-    if (!actionVerb.test(candidate)) return false;
+  function valid(candidate) {
+    if (!candidate || !actionVerb.test(candidate)) {
+      return false;
+    }
 
-    if (isTaskExecution(candidate)) return false;
+    if (isTaskExecution(candidate) ||
+        looksLikeEmailDraft(candidate)) {
+      return false;
+    }
 
-    if (looksLikeEmailDraft(candidate)) return false;
-
-    // Reject generic wrappers that change the task.
     if (
       /^write a response to (?:this|the) request\b/i.test(candidate)
     ) {
       return false;
     }
 
-    if (!containsAllAnchors(raw, candidate)) return false;
+    if (!containsAllAnchors(raw, candidate)) {
+      return false;
+    }
+
+    // Preserve important technical and output requirements.
+    const requiredTerms = [
+      [/\bcsv\b/i, /\bcsv\b/i],
+      [/\bjson\b/i, /\bjson\b/i],
+      [/\bpython\b/i, /\bpython\b/i],
+      [/\bemail addresses?\b/i, /\bemails?\b|email addresses?/i],
+      [/\bduplicates?\b/i, /\bduplicates?|deduplicat/i],
+      [/\bmissing files?\b/i, /\bmissing files?\b|file not found/i],
+      [/\binvalid data\b/i, /\binvalid data\b|data validation/i],
+      [/\bsetup instructions?\b/i, /\bsetup\b|installation instructions?/i],
+      [/\bcomplete (?:python )?code\b/i, /\bcomplete code\b|full code\b/i],
+      [/\bget requests?\b/i, /\bget requests?\b|http get\b/i],
+      [/\berrors?\b/i, /\berrors?\b|exceptions?\b/i]
+    ];
+
+    for (const [sourcePattern, outputPattern] of requiredTerms) {
+      if (
+        sourcePattern.test(original) &&
+        !outputPattern.test(candidate)
+      ) {
+        return false;
+      }
+    }
+
+    // Preserve performance requirements.
+    if (
+      /\b(?:quickly|fast|low latency|efficiently)\b/i.test(original) &&
+      !/\b(?:quickly|fast|low latency|efficiently|efficient|performance)\b/i.test(candidate)
+    ) {
+      return false;
+    }
 
     return true;
   }
 
-  const candidates = [
-    aiCandidate,
-    fallback
-  ].filter(isAcceptable);
-
-  if (!candidates.length) {
-    return original;
-  }
-
-  const unique = [...new Set(candidates)];
+  let activeTokenizer;
 
   try {
-    const activeTokenizer = await getTokenizer();
-
-    const originalTokens =
-      activeTokenizer.encode(original).length;
-
-    const ranked = unique.map((text) => ({
-      text,
-      tokens: activeTokenizer.encode(text).length
-    }));
-
-    ranked.sort((a, b) => a.tokens - b.tokens);
-
-    const best = ranked[0];
-
-    // Never return a longer or equal-length prompt.
-    if (!best || best.tokens >= originalTokens) {
-      return original;
-    }
-
-    return best.text;
-
+    activeTokenizer = await getTokenizer();
   } catch (error) {
-    console.warn(
-      "Token-aware selection unavailable:",
-      error
-    );
-
-    // If measurement fails, preserve the original.
+    console.warn("Tokenizer unavailable:", error);
     return original;
   }
+
+  const count = (text) =>
+    activeTokenizer.encode(text).length;
+
+  const originalCount = count(original);
+
+  const candidates = [
+    normalize(generated || ""),
+    normalize(fallbackPrompt(raw))
+  ];
+
+  function bestCandidate() {
+    const ranked = [...new Set(candidates)]
+      .filter(valid)
+      .map((text) => ({
+        text,
+        tokens: count(text)
+      }))
+      .filter((item) => item.tokens < originalCount)
+      .sort((a, b) => a.tokens - b.tokens);
+
+    return ranked[0] || null;
+  }
+
+  let best = bestCandidate();
+
+  // Retry only when the first attempt did not
+  // produce a shorter, validated instruction.
+  if (!best && originalCount > 20) {
+    try {
+      $("loadingText").textContent =
+        "Refining prompt compression…";
+
+      const ai = await getEngine();
+
+      const retry = await ai.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content:
+              "You compress requests into short instructions " +
+              "for another AI. Never perform the requested task. " +
+              "Preserve every requirement, technology, number, " +
+              "condition, and deliverable. Remove filler and " +
+              "redundancy. Use a direct action verb. " +
+              "Return only the compressed instruction."
+          },
+          {
+            role: "user",
+            content:
+              "Rewrite the following request into a shorter " +
+              "instruction. Preserve all requirements. " +
+              "Do not answer the request.\n\n" +
+              original
+          }
+        ],
+        temperature: 0,
+        top_p: 0.9,
+        max_tokens: 180
+      });
+
+      const retryText = normalize(
+        retry.choices?.[0]?.message?.content || ""
+      );
+
+      candidates.push(retryText);
+      best = bestCandidate();
+
+    } catch (error) {
+      console.warn(
+        "Second compression attempt failed:",
+        error
+      );
+    }
+  }
+
+  return best ? best.text : original;
 }
 
 // =====================================
