@@ -131,37 +131,44 @@ function rewritePrompt(raw, mode) {
 
 
 
+
 function promptPrompt(raw) {
   return [
-    "TASK: Rewrite the input as a prompt for another AI.",
-    "Do NOT perform the task described in the input.",
-    "",
-    "You are a prompt editor, NOT a task executor.",
+    "TASK: Compress the input into a concise English prompt for another AI.",
+    "You are a prompt optimizer, NOT a task executor.",
     "",
     "RULES:",
-    "- Produce an instruction that another AI can execute.",
-    "- Never write the requested email, code, answer, or solution.",
-    "- Preserve the objective, inputs, constraints, and output requirements.",
-    "- Remove filler, repetition, and unnecessary wording.",
-    "- Do not invent missing information.",
-    "- Use concise, natural English.",
-    "- Return only the optimized prompt.",
+    "1. Do NOT execute the task. Never generate requested code, emails or answers.",
+    "2. Preserve the exact objective, essential facts, inputs and constraints.",
+    "3. Remove filler, repetition, greetings and redundant phrases.",
+    "4. Prefer short, direct instructions over verbose descriptions.",
+    "5. Combine related requirements into one sentence when clear.",
+    "6. Do not add generic roles, introductions or explanations.",
+    "7. Do not invent details or omit necessary requirements.",
+    "8. Use one sentence for simple tasks; compact structure for complex tasks.",
+    "9. Aim for fewer tokens than the input when possible.",
+    "10. Return ONLY the optimized prompt in English.",
     "",
     "EXAMPLES:",
     "",
-    "INPUT: Write a polite email asking my manager for leave.",
-    "OUTPUT: Draft a concise, polite email requesting leave from my manager.",
+    "INPUT: I would like you to please help me write a professional email",
+    "to my manager asking if I can take two days of leave next week.",
+    "OUTPUT: Draft a professional email requesting two days of leave next week.",
     "",
-    "INPUT: Build a Python script that removes duplicate CSV rows.",
-    "OUTPUT: Write a Python script that reads a CSV and removes duplicate rows.",
+    "INPUT: I need you to create a Python script that reads a CSV file,",
+    "removes all duplicate rows, checks whether email addresses are valid,",
+    "and saves the final cleaned data to another CSV file.",
+    "OUTPUT: Write a Python script to deduplicate CSV rows, validate emails,",
+    "and export the cleaned CSV.",
     "",
-    "INPUT: Explain how HTTPS works.",
-    "OUTPUT: Explain how HTTPS works clearly and concisely.",
+    "INPUT: I want a REST API endpoint that should return a successful",
+    "HTTP 200 response whenever the request parameter has the value YES.",
+    "OUTPUT: Create a REST endpoint returning HTTP 200 when a request parameter equals YES.",
     "",
-    "NOW TRANSFORM THIS INPUT. DO NOT EXECUTE IT:",
+    "TRANSFORM THE FOLLOWING INPUT. DO NOT EXECUTE IT:",
     raw,
     "",
-    "OPTIMIZED PROMPT:"
+    "COMPRESSED PROMPT:"
   ].join("\n");
 }
 
