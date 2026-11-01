@@ -129,47 +129,41 @@ function rewritePrompt(raw, mode) {
   );
 }
 
-
-
-
 function promptPrompt(raw) {
   return [
-    "TASK: Compress the input into a concise English prompt for another AI.",
-    "You are a prompt optimizer, NOT a task executor.",
+    "Rewrite the INPUT as a shorter English prompt for another AI.",
+    "Do not perform the requested task.",
+    "Preserve all essential requirements and constraints.",
+    "Remove filler and repetition. Do not invent details.",
+    "Return ONLY the rewritten prompt: no explanations,",
+    "notes, introductions, code, or commentary.",
     "",
-    "RULES:",
-    "1. Do NOT execute the task. Never generate requested code, emails or answers.",
-    "2. Preserve the exact objective, essential facts, inputs and constraints.",
-    "3. Remove filler, repetition, greetings and redundant phrases.",
-    "4. Prefer short, direct instructions over verbose descriptions.",
-    "5. Combine related requirements into one sentence when clear.",
-    "6. Do not add generic roles, introductions or explanations.",
-    "7. Do not invent details or omit necessary requirements.",
-    "8. Use one sentence for simple tasks; compact structure for complex tasks.",
-    "9. Aim for fewer tokens than the input when possible.",
-    "10. Return ONLY the optimized prompt in English.",
+    "Example:",
+    "INPUT: Please help me write a polite email asking for leave.",
+    "OUTPUT: Draft a polite email requesting leave.",
     "",
-    "EXAMPLES:",
-    "",
-    "INPUT: I would like you to please help me write a professional email",
-    "to my manager asking if I can take two days of leave next week.",
-    "OUTPUT: Draft a professional email requesting two days of leave next week.",
-    "",
-    "INPUT: I need you to create a Python script that reads a CSV file,",
-    "removes all duplicate rows, checks whether email addresses are valid,",
-    "and saves the final cleaned data to another CSV file.",
-    "OUTPUT: Write a Python script to deduplicate CSV rows, validate emails,",
-    "and export the cleaned CSV.",
-    "",
-    "INPUT: I want a REST API endpoint that should return a successful",
-    "HTTP 200 response whenever the request parameter has the value YES.",
-    "OUTPUT: Create a REST endpoint returning HTTP 200 when a request parameter equals YES.",
-    "",
-    "TRANSFORM THE FOLLOWING INPUT. DO NOT EXECUTE IT:",
+    "INPUT:",
     raw,
     "",
-    "COMPRESSED PROMPT:"
+    "OUTPUT:"
   ].join("\n");
+}
+
+function cleanPromptOutput(text) {
+  let result = text.trim();
+
+  // Remove common leading labels.
+  result = result.replace(
+    /^(optimized|enhanced|compressed|rewritten)\s+prompt\s*:\s*/i,
+    ""
+  );
+
+  // Remove common explanatory paragraphs at the end.
+  result = result.split(
+    /\n\s*(?:this prompt|this version|the above prompt|explanation:|note:)/i
+  )[0];
+
+  return result.trim();
 }
 
 function showResult(text, label) {
@@ -274,7 +268,12 @@ async function generate(kind, again = false) {
       max_tokens: kind === "rewrite" ? 384 : 160
     });
 
-    const out = result.choices?.[0]?.message?.content?.trim();
+    const generated =
+      result.choices?.[0]?.message?.content?.trim();
+
+    const out = kind === "prompt"
+      ? cleanPromptOutput(generated || "")
+      : generated;
 
     if (!out) {
       throw new Error(
