@@ -2,8 +2,6 @@
 import { MLCEngine, prebuiltAppConfig } from "@mlc-ai/web-llm";
 import "./style.css";
 
-// Prefer a smaller model for faster mobile inference.
-// Actual availability depends on the installed WebLLM version.
 const MODEL_CANDIDATES = [
   "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
   "Qwen2.5-0.5B-Instruct-q4f32_1-MLC",
@@ -95,7 +93,6 @@ async function getEngine() {
       }
     });
 
-    // Cached models can initialize without internet.
     await instance.reload(modelId);
 
     engine = instance;
@@ -129,8 +126,7 @@ function rewritePrompt(raw, mode) {
   );
 }
 
-// Prompt transformation: one local model call,
-// deterministic validation and fallback.
+// Prompt transformation pipeline.
 function promptPrompt(raw) {
   return [
     "You are a prompt editor. Rewrite the quoted INPUT as an instruction for another AI.",
@@ -153,7 +149,6 @@ function cleanPromptOutput(text) {
     .trim();
 }
 
-// Conservative requirement anchors.
 function requirementAnchors(raw) {
   const anchors = [];
 
@@ -194,12 +189,9 @@ function isTaskExecution(text) {
     /\n\s*\n/.test(output);
 }
 
-// Local fallback that preserves original requirements.
-
 function fallbackPrompt(raw) {
   const original = raw.trim().replace(/\s+/g, " ");
 
-  // Convert leave-request wording into an email-writing prompt.
   const leaveMatch = original.match(
     /^request\s+(.+?)\s+from\s+(my|the|a)\s+manager\.?$/i
   );
@@ -214,14 +206,11 @@ function fallbackPrompt(raw) {
     );
   }
 
-  let text = original
-    .replace(
-      /^(?:please\s+)?(?:i would like to|i'd like to|i want to|i need to|can you|could you|please help me|help me)\s+/i,
-      ""
-    )
-    .trim();
+  let text = original.replace(
+    /^(?:please\s+)?(?:i would like to|i'd like to|i want to|i need to|can you|could you|please help me|help me)\s+/i,
+    ""
+  ).trim();
 
-  // Handle requests to write an email.
   if (/^(?:write|draft|create|send)\s+(?:an?\s+)?(?:\w+\s+){0,5}email\b/i.test(text)) {
     text = text.replace(
       /^(?:write|draft|create|send)\b/i,
@@ -229,7 +218,6 @@ function fallbackPrompt(raw) {
     );
   }
 
-  // Handle "asking for leave" phrasing.
   text = text.replace(
     /\basking for\b/gi,
     "requesting"
@@ -241,7 +229,7 @@ function fallbackPrompt(raw) {
   );
 
   const actionVerb =
-    /^(?:write|draft|create|build|generate|explain|analyze|summarize|compare|design|develop|list|translate|review|edit|provide|describe|implement|prepare|outline|convert|extract|plan)\b/i;
+    /^(?:write|draft|create|build|generate|make|explain|analyze|summarize|compare|design|develop|list|translate|review|edit|provide|describe|implement|prepare|suggest|outline|convert|extract|plan|research)\b/i;
 
   if (!actionVerb.test(text)) {
     text = "Write a response to this request: " + original;
@@ -267,21 +255,94 @@ function looksLikeEmailDraft(text) {
 function transformPromptOutput(raw, generated) {
   const candidate = cleanPromptOutput(generated);
 
-  const startsWithInstruction =
-    /^(?:write|draft|create|build|generate|make|explain|analyze|summarize|compare|design|develop|list|translate|review|edit|provide|describe|implement|prepare|suggest|outline|convert|extract|plan)\b/i;
+  const actionVerb =
+    /^(?:write|draft|create|build|generate|make|explain|analyze|summarize|compare|design|develop|list|translate|review|edit|provide|describe|implement|prepare|suggest|outline|convert|extract|plan|research)\b/i;
 
   const valid =
     candidate.length > 0 &&
-    startsWithInstruction.test(candidate) &&
     !isTaskExecution(candidate) &&
     !looksLikeEmailDraft(candidate) &&
-    containsAllAnchors(raw, candidate);
+    containsAllAnchors(raw, candidate) &&
+    actionVerb.test(candidate);
 
-  if (valid) {
-    return candidate;
+  return valid ? candidate : fallbackPrompt(raw);
+}
+
+// Token measurement.
+// Displays counts only when the WebLLM tokenizer is available.
+async function measurePromptTokens(raw, enhanced) {
+  try {
+    const ai = await getEngine();
+    const tokenizer = ai.tokenizer;
+
+    if (typeof tokenizer?.encode !== "function") {
+      return null;
+    }
+
+    const [originalIds, enhancedIds] = await Promise.all([
+      tokenizer.encode(raw),
+      tokenizer.encode(enhanced)
+    ]);
+
+    const original = originalIds?.length;
+    const optimized = enhancedIds?.length;
+
+    if (
+      !Number.isFinite(original) ||
+      !Number.isFinite(optimized)
+    ) {
+      return null;
+    }
+
+    const saved = original - optimized;
+
+    return {
+      original,
+      optimized,
+      saved,
+      percentage: original
+        ? (saved / original) * 100
+        : 0
+    };
+  } catch (error) {
+    console.warn("Token measurement unavailable:", error);
+    return null;
+  }
+}
+
+async function updateTokenStats(raw, enhanced, kind) {
+  const panel = $("tokenStats");
+
+  if (!panel) return;
+
+  panel.hidden = kind !== "prompt";
+
+  if (kind !== "prompt") return;
+
+  $("originalTokens").textContent = "";
+  $("enhancedTokens").textContent = "";
+  $("tokensSaved").textContent = "Checking token counter…";
+
+  const stats = await measurePromptTokens(raw, enhanced);
+
+  if (!stats) {
+    $("tokensSaved").textContent =
+      "Exact token counts unavailable in this WebLLM build.";
+    return;
   }
 
-  return fallbackPrompt(raw);
+  $("originalTokens").textContent =
+    `Original: ${stats.original} tokens`;
+
+  $("enhancedTokens").textContent =
+    `Enhanced: ${stats.optimized} tokens`;
+
+  const direction =
+    stats.saved >= 0 ? "saved" : "added";
+
+  $("tokensSaved").textContent =
+    `${Math.abs(stats.saved)} tokens ${direction} ` +
+    `(${Math.abs(stats.percentage).toFixed(1)}%)`;
 }
 
 function showResult(text, label) {
@@ -404,6 +465,8 @@ async function generate(kind, again = false) {
         ? "Improved text"
         : "Enhanced prompt"
     );
+
+    await updateTokenStats(raw, out, kind);
   } catch (error) {
     console.error("ProText AI generation failed:", error);
 
@@ -591,6 +654,11 @@ function showFeature(f) {
         : "Your saved rewrites stay on this device.";
 
   $("menuPanel").hidden = true;
+
+  if ($("tokenStats")) {
+    $("tokenStats").hidden =
+      f !== "prompt" || !lastOutput;
+  }
 
   notice();
 
