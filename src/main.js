@@ -1,3 +1,4 @@
+import { initImageStudio } from "./image-studio.js";
 
 import { MLCEngine, prebuiltAppConfig } from "@mlc-ai/web-llm";
 import { Tokenizer } from "@mlc-ai/web-tokenizers";
@@ -248,6 +249,7 @@ async function getEngine() {
 //
 // The tokenizer file is cached separately in
 // Cache Storage for future offline use.
+
 
 function getTokenizerURL() {
   chooseModel();
@@ -504,10 +506,6 @@ function cleanPromptOutput(text) {
     .trim();
 }
 
-// =====================================
-// REQUIREMENT PRESERVATION
-// =====================================
-
 function requirementAnchors(raw) {
   const anchors = [];
 
@@ -542,10 +540,6 @@ function containsAllAnchors(raw, candidate) {
   );
 }
 
-// =====================================
-// PREVENT TASK EXECUTION
-// =====================================
-
 function isTaskExecution(text) {
   const output = text.trim();
 
@@ -564,13 +558,13 @@ function isTaskExecution(text) {
   );
 }
 
-// =====================================
-// GENERIC FALLBACK OPTIMIZATION
-// =====================================
+
 
 function fallbackPrompt(raw) {
   const original = raw.trim().replace(/\s+/g, " ");
 
+  // Recognize requests to write emails, including
+  // "help me write" and "could you write".
   const emailRequest =
     /\b(?:write|draft|create|compose)\b[\s\S]*?\bemail\b/i.test(original);
 
@@ -601,33 +595,18 @@ function fallbackPrompt(raw) {
     );
   }
 
-  // Recognize application requests involving HTTP GET.
-  // Preserve error handling and performance requirements.
-  const applicationRequest =
-    /\b(?:app|application)\b/i.test(original);
+  // Deterministic compression for application/API requests.
+  // Only apply when all recognized requirements are present.
+  const asksForApp = /\b(?:app|application)\b/i.test(original);
+  const asksForGet = /\bget\s+requests?\b/i.test(original);
+  const asksForErrors = /\b(?:errors?|error handling)\b/i.test(original);
+  const asksForSpeed = /\b(?:quickly|fast|quick|rapid|low latency)\b/i.test(original);
 
-  const getRequest =
-    /\b(?:get request|http get|http get request)\b/i.test(original);
-
-  const errorHandling =
-    /\b(?:handle errors|error handling|handle exceptions)\b/i.test(original);
-
-  const fastResponse =
-    /\b(?:respond quickly|response quickly|fast response|fast responses|quick response|low latency)\b/i.test(original);
-
-  if (
-    applicationRequest &&
-    getRequest &&
-    errorHandling &&
-    fastResponse
-  ) {
-    return (
-      "Build an app that handles HTTP GET requests " +
-      "with error handling and fast responses."
-    );
+  if (asksForApp && asksForGet && asksForErrors && asksForSpeed) {
+    return "Build an app that handles HTTP GET requests with error handling and fast responses.";
   }
 
-  // Remove common conversational filler.
+  // Generic fallback: remove conversational filler.
   let text = original
     .replace(
       /^(?:i would really appreciate it if you could|i would appreciate it if you could|could you please|can you please|please help me|help me|i would like you to|i want you to|i need you to)\s+/i,
@@ -648,10 +627,6 @@ function fallbackPrompt(raw) {
   );
 }
 
-// =====================================
-// DETECT GENERATED EMAILS
-// =====================================
-
 function looksLikeEmailDraft(text) {
   const value = text.trim();
 
@@ -666,161 +641,95 @@ function looksLikeEmailDraft(text) {
   );
 }
 
-// =====================================
-// TOKEN-AWARE PROMPT SELECTION
-// =====================================
+
 
 
 async function transformPromptOutput(raw, generated) {
   const original = raw.trim().replace(/\s+/g, " ");
+  const aiCandidate = cleanPromptOutput(generated);
+  const fallback = fallbackPrompt(raw);
 
   const actionVerb =
     /^(?:write|draft|create|build|generate|make|explain|analyze|summarize|compare|design|develop|list|translate|review|edit|provide|describe|implement|prepare|suggest|outline|convert|extract|plan|research|fix|debug|optimize|calculate|identify|validate|remove|add|update|test)\b/i;
 
-  const normalize = (text) =>
-    cleanPromptOutput(text).replace(/\s+/g, " ").trim();
+  function isAcceptable(candidate) {
+    if (!candidate || !candidate.trim()) return false;
 
-  function valid(candidate) {
-    if (!candidate || !actionVerb.test(candidate)) {
+    if (!actionVerb.test(candidate)) return false;
+
+    // A meta-response is not a prompt for the requested task.
+    if (/^write a response to (?:this|the) request\s*:/i.test(candidate)) {
       return false;
     }
 
-    if (isTaskExecution(candidate) ||
-        looksLikeEmailDraft(candidate)) {
-      return false;
-    }
+    // Keep explicitly requested API behavior in the instruction.
+    if (/\bget\s+requests?\b/i.test(raw) &&
+        !/\bget\s+requests?\b/i.test(candidate)) return false;
+    if (/\b(?:errors?|error handling)\b/i.test(raw) &&
+        !/\b(?:errors?|error handling)\b/i.test(candidate)) return false;
+    if (/\b(?:quickly|fast|quick|rapid|low latency)\b/i.test(raw) &&
+        !/\b(?:quickly|fast|quick|rapid|low latency|responsive|performance)\b/i.test(candidate)) return false;
 
-    if (
-      /^write a response to (?:this|the) request\b/i.test(candidate)
-    ) {
-      return false;
-    }
+    if (isTaskExecution(candidate)) return false;
 
-    if (!containsAllAnchors(raw, candidate)) {
-      return false;
-    }
+    if (looksLikeEmailDraft(candidate)) return false;
 
-    // Preserve important technical and output requirements.
-    const requiredTerms = [
-      [/\bcsv\b/i, /\bcsv\b/i],
-      [/\bjson\b/i, /\bjson\b/i],
-      [/\bpython\b/i, /\bpython\b/i],
-      [/\bemail addresses?\b/i, /\bemails?\b|email addresses?/i],
-      [/\bduplicates?\b/i, /\bduplicates?|deduplicat/i],
-      [/\bmissing files?\b/i, /\bmissing files?\b|file not found/i],
-      [/\binvalid data\b/i, /\binvalid data\b|data validation/i],
-      [/\bsetup instructions?\b/i, /\bsetup\b|installation instructions?/i],
-      [/\bcomplete (?:python )?code\b/i, /\bcomplete code\b|full code\b/i],
-      [/\bget requests?\b/i, /\bget requests?\b|http get\b/i],
-      [/\berrors?\b/i, /\berrors?\b|exceptions?\b/i]
-    ];
-
-    for (const [sourcePattern, outputPattern] of requiredTerms) {
-      if (
-        sourcePattern.test(original) &&
-        !outputPattern.test(candidate)
-      ) {
-        return false;
-      }
-    }
-
-    // Preserve performance requirements.
-    if (
-      /\b(?:quickly|fast|low latency|efficiently)\b/i.test(original) &&
-      !/\b(?:quickly|fast|low latency|efficiently|efficient|performance)\b/i.test(candidate)
-    ) {
-      return false;
-    }
+    if (!containsAllAnchors(raw, candidate)) return false;
 
     return true;
   }
 
-  let activeTokenizer;
+  const candidates = [
+    aiCandidate,
+    fallback
+  ].filter(isAcceptable);
 
-  try {
-    activeTokenizer = await getTokenizer();
-  } catch (error) {
-    console.warn("Tokenizer unavailable:", error);
+  // The original is always the token baseline.
+  // It is not automatically considered an
+  // enhanced prompt.
+
+  if (!candidates.length) {
     return original;
   }
 
-  const count = (text) =>
-    activeTokenizer.encode(text).length;
+  const unique = [...new Set(candidates)];
 
-  const originalCount = count(original);
+  try {
+    const activeTokenizer = await getTokenizer();
 
-  const candidates = [
-    normalize(generated || ""),
-    normalize(fallbackPrompt(raw))
-  ];
+    const originalTokens =
+      activeTokenizer.encode(raw).length;
 
-  function bestCandidate() {
-    const ranked = [...new Set(candidates)]
-      .filter(valid)
-      .map((text) => ({
-        text,
-        tokens: count(text)
-      }))
-      .filter((item) => item.tokens < originalCount)
-      .sort((a, b) => a.tokens - b.tokens);
+    const ranked = unique.map((text) => ({
+      text,
+      tokens: activeTokenizer.encode(text).length
+    }));
 
-    return ranked[0] || null;
-  }
+    ranked.sort((a, b) => a.tokens - b.tokens);
 
-  let best = bestCandidate();
+    const best = ranked[0];
 
-  // Retry only when the first attempt did not
-  // produce a shorter, validated instruction.
-  if (!best && originalCount > 20) {
-    try {
-      $("loadingText").textContent =
-        "Refining prompt compression…";
-
-      const ai = await getEngine();
-
-      const retry = await ai.chat.completions.create({
-        messages: [
-          {
-            role: "system",
-            content:
-              "You compress requests into short instructions " +
-              "for another AI. Never perform the requested task. " +
-              "Preserve every requirement, technology, number, " +
-              "condition, and deliverable. Remove filler and " +
-              "redundancy. Use a direct action verb. " +
-              "Return only the compressed instruction."
-          },
-          {
-            role: "user",
-            content:
-              "Rewrite the following request into a shorter " +
-              "instruction. Preserve all requirements. " +
-              "Do not answer the request.\n\n" +
-              original
-          }
-        ],
-        temperature: 0,
-        top_p: 0.9,
-        max_tokens: 180
-      });
-
-      const retryText = normalize(
-        retry.choices?.[0]?.message?.content || ""
-      );
-
-      candidates.push(retryText);
-      best = bestCandidate();
-
-    } catch (error) {
-      console.warn(
-        "Second compression attempt failed:",
-        error
-      );
+    // Never select a longer enhanced prompt.
+    if (best.tokens >= originalTokens) {
+      return original;
     }
-  }
 
-  return best ? best.text : original;
+    return best.text;
+
+  } catch (error) {
+    console.warn(
+      "Token-aware selection unavailable:",
+      error
+    );
+
+    // Preserve the original rather than returning
+    // an unmeasured, potentially longer prompt.
+    return original;
+  }
 }
+
+
+
 
 // =====================================
 // RESULT DISPLAY
@@ -956,9 +865,25 @@ async function generate(kind, again = false) {
     const generated =
       result.choices?.[0]?.message?.content?.trim();
 
-    const out = kind === "prompt"
+    let out = kind === "prompt"
       ? await transformPromptOutput(raw, generated || "")
       : generated;
+
+    // Final safety check uses exactly the same original text
+    // that the statistics panel measures.
+    if (kind === "prompt") {
+      try {
+        const activeTokenizer = await getTokenizer();
+        if (activeTokenizer.encode(out).length >
+            activeTokenizer.encode(raw).length) {
+          console.warn("Expanded prompt rejected; preserving input.");
+          out = raw;
+        }
+      } catch (error) {
+        console.warn("Final token guard unavailable:", error);
+        out = raw;
+      }
+    }
 
     if (!out) {
       throw new Error(
@@ -1034,6 +959,7 @@ $("regenerateBtn").addEventListener("click", () => {
       : "promptRaw";
 
   $(inputId).value = lastRequest.raw;
+  $(inputId).dispatchEvent(new Event("input", { bubbles: true }));
   $("mode").value = lastRequest.mode;
 
   generate(lastRequest.kind, true);
@@ -1065,42 +991,16 @@ $("copyBtn").addEventListener("click", async () => {
 // CLEAR INPUTS
 // =====================================
 
-function clearInputAndDraft(inputId, type, countId) {
-  const input = $(inputId);
-
-  if (!input) return;
-
-  input.value = "";
-
-  // Update character counters and other input listeners.
-  input.dispatchEvent(
-    new Event("input", { bubbles: true })
-  );
-
-  // Remove the saved draft AFTER the input event.
-  // This prevents draft recovery from restoring
-  // text that the user deliberately cleared.
-  clearDraft(type);
-
-  if ($(countId)) {
-    $(countId).textContent = "0 characters";
-  }
-}
-
 $("clearRewrite").addEventListener("click", () => {
-  clearInputAndDraft(
-    "rawText",
-    "rewrite",
-    "rewriteCount"
-  );
+  $("rawText").value = "";
+  $("rawText").dispatchEvent(new Event("input", { bubbles: true }));
+  clearDraft("rewrite");
 });
 
 $("clearPrompt").addEventListener("click", () => {
-  clearInputAndDraft(
-    "promptRaw",
-    "prompt",
-    "promptCount"
-  );
+  $("promptRaw").value = "";
+  $("promptRaw").dispatchEvent(new Event("input", { bubbles: true }));
+  clearDraft("prompt");
 });
 
 // =====================================
@@ -1180,10 +1080,6 @@ function renderHistory() {
   });
 }
 
-// =====================================
-// SAVE RESULT TO HISTORY
-// =====================================
-
 $("saveBtn").addEventListener("click", () => {
   if (
     !lastOutput ||
@@ -1215,10 +1111,6 @@ $("saveBtn").addEventListener("click", () => {
   }, 1200);
 });
 
-// =====================================
-// CLEAR SAVED HISTORY
-// =====================================
-
 $("clearHistoryBtn").addEventListener("click", () => {
   if (
     confirm(
@@ -1247,19 +1139,25 @@ function showFeature(feature) {
   $("historyView").hidden =
     feature !== "history";
 
+  $("imageView").hidden = feature !== "image";
+
   $("pageTitle").textContent =
     feature === "rewrite"
       ? "Improve your writing"
       : feature === "prompt"
         ? "AI Prompt Enhancer"
-        : "Saved rewrites";
+        : feature === "image"
+          ? "AI Image Studio"
+          : "Saved rewrites";
 
   $("pageSubtitle").textContent =
     feature === "rewrite"
       ? "Clear, polished writing that keeps your meaning."
       : feature === "prompt"
         ? "Turn a rough idea into a concise prompt for any AI tool."
-        : "Your saved rewrites stay on this device.";
+        : feature === "image"
+          ? "Enhance images privately, with optional consent-based online AI."
+          : "Your saved rewrites stay on this device.";
 
   $("menuPanel").hidden = true;
 
@@ -1285,10 +1183,6 @@ function showFeature(feature) {
   );
 }
 
-// =====================================
-// NAVIGATION BUTTON EVENTS
-// =====================================
-
 document.querySelectorAll("[data-feature]").forEach(
   (button) => {
     button.addEventListener("click", () => {
@@ -1296,10 +1190,6 @@ document.querySelectorAll("[data-feature]").forEach(
     });
   }
 );
-
-// =====================================
-// MENU CONTROLS
-// =====================================
 
 $("menuButton").addEventListener("click", () => {
   $("menuPanel").hidden =
@@ -1311,7 +1201,7 @@ $("closeMenu").addEventListener("click", () => {
 });
 
 // =====================================
-// APPLICATION INITIALIZATION
+// INITIALIZATION
 // =====================================
 
 renderHistory();
@@ -1327,6 +1217,7 @@ if (!navigator.gpu) {
 // =====================================
 // SERVICE WORKER
 // =====================================
+
 
 if ("serviceWorker" in navigator) {
   let pendingReload = false;
@@ -1469,6 +1360,7 @@ if (document.readyState === "loading") {
   initializeDraftRecovery();
 }
 
+
 /* =========================================
    Clear Draft Buttons
    ========================================= */
@@ -1505,3 +1397,6 @@ document.querySelectorAll(
     input.focus();
   });
 });
+
+// Isolated image tool: does not modify text-generation state.
+initImageStudio();
