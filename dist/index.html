@@ -8,8 +8,8 @@
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="./icon.svg">
     <title>ProText AI</title>
-  <script type="module" crossorigin src="/protext-ai/assets/index-H2_Zo55S.js"></script>
-  <link rel="stylesheet" crossorigin href="/protext-ai/assets/index-Cx1lCSnG.css">
+  <script type="module" crossorigin src="/protext-ai/assets/index-D6v-tgcJ.js"></script>
+  <link rel="stylesheet" crossorigin href="/protext-ai/assets/index-vUzqYB-I.css">
 </head>
 <body>
 <div class="app-shell">
@@ -22,6 +22,7 @@
         <button data-feature="rewrite" class="menu-link active">✦ <span><b>Improve text</b><small>Polish everyday writing</small></span></button>
         <button data-feature="prompt" class="menu-link">⌘ <span><b>AI Prompt Enhancer</b><small>Create concise prompts</small></span></button>
         <button data-feature="image" class="menu-link">▧ <span><b>AI Image Studio</b><small>Private photo enhancement and editing</small></span></button>
+        <button data-feature="face" class="menu-link">◉ <span><b>Face Studio</b><small>Private face crop and cards · offline</small></span></button>
         <button data-feature="history" class="menu-link">◷ <span><b>Saved rewrites</b><small>Your on-device history</small></span></button>
         <div class="menu-foot">More tools can be added here later.</div>
     </div>
@@ -40,27 +41,12 @@
             <div class="feature-tip"><span class="tip-icon">▧</span><span><b>Privacy-first image editing</b><small>Local adjustments never upload your photo. Advanced online AI requires your consent and an internet connection.</small></span></div>
             <div class="field-card image-studio">
                 <label for="imageFile"><b>Choose an image</b></label><input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp">
+                <div id="imageFileSummary" class="face-file-summary" hidden><img id="imageFileThumb" alt="Selected image thumbnail"><div class="face-file-info"><strong id="imageFileName"></strong><small id="imageFileDetails"></small></div><button id="imageReplaceBtn" type="button" class="face-action">Replace</button><button id="imageRemoveBtn" type="button" class="face-action face-remove">Remove</button></div>
                 <p class="image-help">PNG, JPEG or WebP • up to 20 MB • local edits stay on your device</p>
                 <label for="imagePrompt"><b>Describe your edit</b></label><textarea id="imagePrompt" placeholder="Example: Change the background to a beautiful sunset while preserving the subject."></textarea>
-                <label for="imageMode"><b>Processing</b></label><select id="imageMode"><option value="local">Private local enhancement</option><option value="online">Advanced online AI (requires consent)</option><option value="face">Offline face cards</option></select>
+                <label for="imageMode"><b>Processing</b></label><select id="imageMode"><option value="local">Private local enhancement</option><option value="online">Advanced online AI (requires consent)</option></select>
                 <div id="imageLocalOptions"><label for="imagePreset"><b>Local enhancement preset</b></label><select id="imagePreset"><option value="auto">Natural enhancement</option><option value="bright">Brighten</option><option value="contrast">Increase contrast</option><option value="grayscale">Black and white</option><option value="original">Keep original</option></select><p class="image-help">Local presets are deterministic photo adjustments, not generative AI. The prompt is checked for supported local edits.</p></div>
                 <div id="imageOnlineOptions" hidden><p class="image-warning">Online editing sends a resized version of your image and your prompt to Cloudflare Workers AI. Nothing is uploaded until you approve.</p><label class="image-consent"><input type="checkbox" id="imageConsent"> I approve sending this image and prompt to the configured online AI service.</label><p class="image-help">A private access key is required for testing. Never add API keys to browser source code.</p></div>
-                <div id="imageFaceOptions" class="face-options" hidden>
-                    <p class="image-help">Face detection and enhancement run on this device. First-time setup requires locally installed model files.</p>
-                    <button id="faceDetectBtn" type="button" class="primary">Detect faces locally</button>
-                    <p id="faceStatus" role="status" aria-live="polite"></p>
-                    <div id="faceSelection" hidden>
-                        <div class="face-stage"><img id="faceSourcePreview" alt="Photo with detected faces"><div id="faceBoxes"></div></div>
-                        <p class="image-help">Tap a face box to select it.</p>
-                        <label for="faceResolution"><b>Card size</b></label>
-                        <select id="faceResolution"><option value="512">512 × 512</option><option value="1024" selected>1024 × 1024</option></select>
-                        <label for="faceStrength"><b>Enhancement</b></label>
-                        <select id="faceStrength"><option value="natural">Natural</option><option value="balanced" selected>Balanced</option><option value="strong">Strong</option></select>
-                        <button id="faceCreateBtn" type="button" class="primary">Create selected face card</button>
-                        <button id="faceCreateAllBtn" type="button">Create cards for all detected faces</button>
-                    </div>
-                    <div id="faceCards" class="face-card-grid"></div>
-                </div>
                 <button id="imageProcess" class="primary" type="button">Process image</button><p id="imageStatus" role="status" aria-live="polite" class="image-help"></p>
             </div>
             <div id="imageComparison" class="field-card image-comparison" hidden>
@@ -73,6 +59,39 @@
                 </div>
                 <div class="image-compare-labels"><span>Edited</span><span>Original</span></div>
                 <a id="imageDownload" class="primary image-download" download="protext-ai-edited.png">Save edited image</a>
+            </div>
+        </section>
+        <section id="faceView" class="feature-view" hidden>
+            <div class="feature-tip"><span class="tip-icon">◉</span><span><b>Face Studio · On-device</b><small>Detect faces and create cards privately. Photos are not uploaded.</small></span></div>
+            <div class="field-card face-options" id="imageFaceOptions">
+                <div class="field-head"><b>Your photo</b><span class="image-help">JPG, PNG or WebP · 20 MB max</span></div>
+                <input id="faceFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+                <button id="faceChooseBtn" type="button" class="primary">Choose photo</button>
+                <div id="faceFileSummary" class="face-file-summary" hidden>
+                    <img id="faceFileThumb" alt="Uploaded photo thumbnail">
+                    <div class="face-file-info"><strong id="faceFileName"></strong><small id="faceFileDetails"></small></div>
+                    <button id="faceReplaceBtn" type="button" class="face-action">Replace</button>
+                    <button id="faceRemoveBtn" type="button" class="face-action face-remove">Remove</button>
+                </div>
+                <button id="faceDetectBtn" type="button" class="primary" disabled>Detect faces</button>
+                <p id="faceStatus" role="status" aria-live="polite"></p>
+                <div id="faceSelection" hidden>
+                    <div class="face-stage"><img id="faceSourcePreview" alt="Photo with editable crop"><div id="faceBoxes"></div></div>
+                    <div class="face-editor-controls">
+                        <div class="face-zoom-head"><label for="faceZoom"><b>Crop size</b></label><button id="faceResetCrop" type="button" class="face-action">Reset</button></div>
+                        <input id="faceZoom" type="range" min="0" max="100" value="50" aria-label="Adjust crop zoom">
+                        <p class="image-help">Drag the frame to move it. Drag the yellow corner to resize.</p>
+                        <p id="faceCropQuality" class="image-help"></p>
+                    </div>
+                    <div id="facePersonPicker" class="face-person-picker" hidden></div>
+                    <div class="face-settings">
+                        <div><label for="faceResolution"><b>Card size</b></label><select id="faceResolution"><option value="512">512 × 512</option><option value="1024" selected>1024 × 1024</option><option value="2048">2048 × 2048</option></select></div>
+                        <div><label for="faceStrength"><b>Clarity</b></label><select id="faceStrength"><option value="natural">Natural</option><option value="balanced" selected>Balanced</option><option value="strong">Strong</option></select></div>
+                    </div>
+                    <button id="faceCreateBtn" type="button" class="primary">Generate face card</button>
+                    <button id="faceCreateAllBtn" type="button" class="face-action face-all">Generate all detected faces</button>
+                </div>
+                <div id="faceCards" class="face-card-grid"></div>
             </div>
         </section>
         <section id="historyView" hidden><div class="field-card"><div class="field-head"><b>Saved rewrites</b><button id="clearHistoryBtn" class="quiet-button">Clear history</button></div><div id="historyList" class="history-list"></div></div></section>

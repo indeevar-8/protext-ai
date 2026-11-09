@@ -241,16 +241,39 @@ export function initImageStudio() {
 
   mode.addEventListener("change", () => {
     $("imageLocalOptions").hidden = mode.value !== "local";
-    const faceOptions = $("imageFaceOptions");
-    if (faceOptions) faceOptions.hidden = mode.value !== "face";
     $("imageOnlineOptions").hidden = mode.value !== "online";
-    process.hidden = mode.value === "face";
+    process.hidden = false;
     $("imageConsent").checked = false;
     releaseResults();
     status("");
   });
-  fileInput.addEventListener("change", () => { releaseResults(); status(""); });
-  if (mode.value === "face") { process.hidden = true; $("imageLocalOptions").hidden = true; $("imageFaceOptions").hidden = false; }
+  let imageThumbURL = null;
+  const imageSummary = $("imageFileSummary");
+  const imageThumb = $("imageFileThumb");
+  const updateFile = () => {
+    releaseResults();
+    status("");
+    if (imageThumbURL) URL.revokeObjectURL(imageThumbURL);
+    imageThumbURL = null;
+    const file = fileInput.files?.[0];
+    if (!file) {
+      if (imageSummary) imageSummary.hidden = true;
+      if (imageThumb) imageThumb.removeAttribute("src");
+      return;
+    }
+    imageThumbURL = URL.createObjectURL(file);
+    if (imageThumb) imageThumb.src = imageThumbURL;
+    $("imageFileName").textContent = file.name;
+    $("imageFileDetails").textContent = `${(file.size / 1024 / 1024).toFixed(1)} MB · Attached`;
+    if (imageSummary) imageSummary.hidden = false;
+  };
+  fileInput.addEventListener("change", updateFile);
+  $("imageReplaceBtn")?.addEventListener("click", () => fileInput.click());
+  $("imageRemoveBtn")?.addEventListener("click", () => {
+    fileInput.value = "";
+    updateFile();
+    status("Photo removed.");
+  });
   process.addEventListener("click", async () => {
     if (processing) return;
     const file = fileInput.files?.[0];
@@ -274,5 +297,5 @@ export function initImageStudio() {
     } catch (error) { status(error?.message || "Image processing failed."); }
     finally { processing = false; process.disabled = false; }
   });
-  window.addEventListener("pagehide", releaseResults);
+  window.addEventListener("pagehide", () => { releaseResults(); if (imageThumbURL) URL.revokeObjectURL(imageThumbURL); });
 }

@@ -1140,12 +1140,15 @@ function showFeature(feature) {
     feature !== "history";
 
   $("imageView").hidden = feature !== "image";
+  $("faceView").hidden = feature !== "face";
 
   $("pageTitle").textContent =
     feature === "rewrite"
       ? "Improve your writing"
       : feature === "prompt"
         ? "AI Prompt Enhancer"
+        : feature === "face"
+          ? "Face Studio"
         : feature === "image"
           ? "AI Image Studio"
           : "Saved rewrites";
@@ -1155,6 +1158,8 @@ function showFeature(feature) {
       ? "Clear, polished writing that keeps your meaning."
       : feature === "prompt"
         ? "Turn a rough idea into a concise prompt for any AI tool."
+        : feature === "face"
+          ? "Detect, crop and save face cards on your device."
         : feature === "image"
           ? "Enhance images privately, with optional consent-based online AI."
           : "Your saved rewrites stay on this device.";
