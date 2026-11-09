@@ -21,6 +21,11 @@
  */
 
 import {
+  checkAIModel,
+  inspectAIModel
+} from "./face-ai-engine.js";
+
+import {
   FaceDetector,
   FilesetResolver
 } from "@mediapipe/tasks-vision";
@@ -109,6 +114,48 @@ function installEnhancementMode() {
   aiOption.disabled = !AI_MODEL_READY;
   select.add(aiOption);
   select.value = "original";
+  const testButton = document.createElement("button");
+  testButton.type = "button";
+  testButton.textContent = "Check offline AI engine";
+  testButton.style.marginTop = "10px";
+
+  select.insertAdjacentElement("afterend", testButton);
+
+  testButton.addEventListener("click", async () => {
+    testButton.disabled = true;
+
+    try {
+      const check = await checkAIModel();
+
+      if (!check.available) {
+        message(
+          "Offline AI: " + check.reason
+        );
+        return;
+      }
+
+      const details = await inspectAIModel(
+        status => message(status)
+      );
+
+      console.info(
+        "Face Studio AI model:",
+        details
+      );
+
+      message(
+        "AI model loaded. Input/output compatibility still needs validation."
+      );
+    } catch (error) {
+      console.error(error);
+
+      message(
+        "AI engine error: " + error.message
+      );
+    } finally {
+      testButton.disabled = false;
+    }
+  });
 
   const info = document.createElement("p");
   info.id = "faceEnhancementInfo";

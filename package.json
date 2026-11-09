@@ -12,7 +12,8 @@
     "@huggingface/inference": "^4.13.32",
     "@mediapipe/tasks-vision": "^1.2.2",
     "@mlc-ai/web-llm": "^0.2.79",
-    "@mlc-ai/web-tokenizers": "^0.1.0"
+    "@mlc-ai/web-tokenizers": "^0.1.0",
+    "onnxruntime-web": "^1.31.1"
   },
   "devDependencies": {
     "vite": "^6.0.0"
