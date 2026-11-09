@@ -7,135 +7,63 @@
     <meta name="description" content="Private, offline AI writing and prompt assistant.">
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="./icon.svg">
-    <title>ProText AI</title>  <script type="module" crossorigin src="/protext-ai/assets/index-DGckZvXK.js"></script>
-  <link rel="stylesheet" crossorigin href="/protext-ai/assets/index-Dn_3QR3b.css">
+    <title>ProText AI</title>
+  <script type="module" crossorigin src="/protext-ai/assets/index-BF6Kbiqc.js"></script>
+  <link rel="stylesheet" crossorigin href="/protext-ai/assets/index-C7uDNKqD.css">
 </head>
 <body>
 <div class="app-shell">
-    <header class="topbar"><a class="brand" href="#home" aria-label="ProText AI home"><span
-            class="brand-mark">P</span><span><b>ProText AI</b><small>Private writing studio</small></span></a>
-        <div class="top-actions"><span class="network"><i id="networkDot"></i><span
-                id="networkLabel">Checking</span></span>
-            <button id="menuButton" class="icon-button" aria-label="Open menu">☰</button>
-        </div>
+    <header class="topbar">
+        <a class="brand" href="#home" aria-label="ProText AI home"><span class="brand-mark">P</span><span><b>ProText AI</b><small>Private writing studio</small></span></a>
+        <div class="top-actions"><span class="network"><i id="networkDot"></i><span id="networkLabel">Checking</span></span><button id="menuButton" class="icon-button" aria-label="Open menu">☰</button></div>
     </header>
     <div id="menuPanel" class="menu-panel" hidden>
-        <button id="closeMenu" class="menu-close">×</button>
-        <button data-feature="rewrite" class="menu-link active">✦ <span><b>Improve text</b><small>Polish everyday writing</small></span>
-        </button>
-        <button data-feature="prompt" class="menu-link">⌘
-            <span><b>AI Prompt Enhancer</b><small>Create concise prompts</small></span></button>
+        <button id="closeMenu" class="menu-close" aria-label="Close menu">×</button>
+        <button data-feature="rewrite" class="menu-link active">✦ <span><b>Improve text</b><small>Polish everyday writing</small></span></button>
+        <button data-feature="prompt" class="menu-link">⌘ <span><b>AI Prompt Enhancer</b><small>Create concise prompts</small></span></button>
         <button data-feature="image" class="menu-link">▧ <span><b>AI Image Studio</b><small>Private photo enhancement and editing</small></span></button>
-        <button data-feature="history" class="menu-link">◷
-            <span><b>Saved rewrites</b><small>Your on-device history</small></span></button>
+        <button data-feature="history" class="menu-link">◷ <span><b>Saved rewrites</b><small>Your on-device history</small></span></button>
         <div class="menu-foot">More tools can be added here later.</div>
     </div>
     <main>
-        <section class="page-heading">
-            <div class="eyebrow">YOUR PRIVATE AI WORKSPACE</div>
-            <h1 id="pageTitle">Improve your writing</h1>
-            <p id="pageSubtitle">Clear, polished writing that keeps your meaning.</p></section>
+        <section class="page-heading"><div class="eyebrow">YOUR PRIVATE AI WORKSPACE</div><h1 id="pageTitle">Improve your writing</h1><p id="pageSubtitle">Clear, polished writing that keeps your meaning.</p></section>
         <section id="rewriteView" class="feature-view">
-            <div class="field-card">
-                <div class="field-head"><label for="rawText">Your text</label>
-                    <button id="clearRewrite" class="quiet-button">Clear</button>
-                </div>
-                <textarea id="rawText" placeholder="Paste or type your rough message…"></textarea>
-                <div class="field-foot"><span
-                        id="rewriteCount">0 characters</span><span>Names and facts stay unchanged</span></div>
-            </div>
-            <div class="field-card options-card"><label for="mode">Writing style</label><select id="mode">
-                <option>Professional</option>
-                <option>Formal</option>
-                <option value="Email">Business email</option>
-                <option value="Polite">Polite and respectful</option>
-                <option>Concise</option>
-                <option>Executive</option>
-                <option>Friendly Professional</option>
-                <option value="Grammar Only">Grammar only</option>
-            </select>
-                <button id="rewriteBtn" class="primary generate-btn">✦ &nbsp; Improve text</button>
-            </div>
+            <div class="field-card"><div class="field-head"><label for="rawText">Your text</label><button id="clearRewrite" class="quiet-button">Clear</button></div><textarea id="rawText" placeholder="Paste or type your rough message…"></textarea><div class="field-foot"><span id="rewriteCount">0 characters</span><span>Names and facts stay unchanged</span></div></div>
+            <div class="field-card options-card"><label for="mode">Writing style</label><select id="mode"><option>Professional</option><option>Formal</option><option value="Email">Business email</option><option value="Polite">Polite and respectful</option><option>Concise</option><option>Executive</option><option>Friendly Professional</option><option value="Grammar Only">Grammar only</option></select><button id="rewriteBtn" class="primary generate-btn">✦ &nbsp; Improve text</button></div>
         </section>
         <section id="promptView" class="feature-view" hidden>
-            <div class="feature-tip"><span
-                    class="tip-icon">⌘</span><span><b>From rough idea to ready-to-use prompt</b><small>Balanced token efficiency: concise, without losing important requirements.</small></span>
-            </div>
-            <div class="field-card">
-                <div class="field-head"><label for="promptRaw">Your problem or idea</label>
-                    <button id="clearPrompt" class="quiet-button">Clear</button>
-                </div>
-                <textarea id="promptRaw"
-                          placeholder="Describe what you want an AI tool to do, the context, and any requirements…"></textarea>
-                <div class="field-foot"><span id="promptCount">0 characters</span><span>Works across AI tools</span>
-                </div>
-            </div>
-            <div class="field-card options-card">
-                <button id="enhanceBtn" class="primary generate-btn">⌘ &nbsp; Enhance prompt</button>
-            </div>
+            <div class="feature-tip"><span class="tip-icon">⌘</span><span><b>From rough idea to ready-to-use prompt</b><small>Balanced token efficiency: concise, without losing important requirements.</small></span></div>
+            <div class="field-card"><div class="field-head"><label for="promptRaw">Your problem or idea</label><button id="clearPrompt" class="quiet-button">Clear</button></div><textarea id="promptRaw" placeholder="Describe what you want an AI tool to do, the context, and any requirements…"></textarea><div class="field-foot"><span id="promptCount">0 characters</span><span>Works across AI tools</span></div></div>
+            <div class="field-card options-card"><button id="enhanceBtn" class="primary generate-btn">⌘ &nbsp; Enhance prompt</button></div>
         </section>
         <section id="imageView" class="feature-view" hidden>
-            <div class="feature-tip"><span class="tip-icon">▧</span><span><b>Privacy-first image editing</b><small>Local adjustments never upload your photo. Advanced online AI requires consent and a configured secure service.</small></span></div>
+            <div class="feature-tip"><span class="tip-icon">▧</span><span><b>Privacy-first image editing</b><small>Local adjustments never upload your photo. Advanced online AI requires your consent and an internet connection.</small></span></div>
             <div class="field-card image-studio">
-                <label for="imageFile"><b>Choose an image</b></label>
-                <input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp" />
-                <p class="image-help">PNG, JPEG or WebP • up to 20 MB • processed in your browser</p>
-                <label for="imagePrompt"><b>Describe your edit</b></label>
-                <textarea id="imagePrompt" placeholder="Example: Make this photo brighter, improve contrast and keep the original colors natural."></textarea>
-                <label for="imageMode"><b>Processing</b></label>
-                <select id="imageMode"><option value="local">Private local enhancement</option><option value="online">Advanced online AI (requires consent)</option></select>
-                <div id="imageLocalOptions"><label for="imagePreset"><b>Local enhancement preset</b></label>
-                    <select id="imagePreset"><option value="auto">Natural enhancement</option><option value="bright">Brighten</option><option value="contrast">Increase contrast</option><option value="grayscale">Black and white</option><option value="original">Keep original</option></select>
-                    <p class="image-help">Local presets are deterministic photo adjustments, not generative AI. The prompt is checked for supported local edits.</p></div>
-                <div id="imageOnlineOptions" hidden>
-                    <p class="image-warning">Online editing sends your image and prompt to the configured provider. No upload occurs until you approve.</p>
-                    <label class="image-consent"><input type="checkbox" id="imageConsent" /> I approve sending this image and prompt to the configured online AI service.</label>
-                    <p class="image-help">Online AI is disabled until you configure a secure backend. Never add API keys to browser code.</p>
-                </div>
-                <button id="imageProcess" class="primary" type="button">Process image</button>
-                <p id="imageStatus" role="status" aria-live="polite" class="image-help"></p>
+                <label for="imageFile"><b>Choose an image</b></label><input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp">
+                <p class="image-help">PNG, JPEG or WebP • up to 20 MB • local edits stay on your device</p>
+                <label for="imagePrompt"><b>Describe your edit</b></label><textarea id="imagePrompt" placeholder="Example: Change the background to a beautiful sunset while preserving the subject."></textarea>
+                <label for="imageMode"><b>Processing</b></label><select id="imageMode"><option value="local">Private local enhancement</option><option value="online">Advanced online AI (requires consent)</option></select>
+                <div id="imageLocalOptions"><label for="imagePreset"><b>Local enhancement preset</b></label><select id="imagePreset"><option value="auto">Natural enhancement</option><option value="bright">Brighten</option><option value="contrast">Increase contrast</option><option value="grayscale">Black and white</option><option value="original">Keep original</option></select><p class="image-help">Local presets are deterministic photo adjustments, not generative AI. The prompt is checked for supported local edits.</p></div>
+                <div id="imageOnlineOptions" hidden><p class="image-warning">Online editing sends a resized version of your image and your prompt to Cloudflare Workers AI. Nothing is uploaded until you approve.</p><label class="image-consent"><input type="checkbox" id="imageConsent"> I approve sending this image and prompt to the configured online AI service.</label><p class="image-help">A private access key is required for testing. Never add API keys to browser source code.</p></div>
+                <button id="imageProcess" class="primary" type="button">Process image</button><p id="imageStatus" role="status" aria-live="polite" class="image-help"></p>
             </div>
-            <div id="imageComparison" class="field-card" hidden>
-                <div class="image-compare-grid"><div><b>Original</b><img id="imageOriginal" alt="Original uploaded image" /></div><div><b>Result</b><img id="imageResult" alt="Processed image" /></div></div>
-                <a id="imageDownload" class="primary image-download" download="protext-edited.png">Save edited image</a>
+            <div id="imageComparison" class="field-card image-comparison" hidden>
+                <h3>Image comparison</h3><p class="image-help image-comparison-help">Drag the divider to compare the edited image with the original.</p>
+                <div class="image-slider-container" id="imageSliderContainer" style="--compare-position:50%">
+                    <img id="imageOriginal" class="image-slider-original" alt="Original uploaded image">
+                    <div class="image-slider-overlay" id="imageSliderOverlay"><img id="imageResult" class="image-slider-result" alt="Edited image"></div>
+                    <div class="image-slider-divider" id="imageSliderDivider" aria-hidden="true"></div>
+                    <input type="range" id="imageCompareSlider" class="image-compare-range" min="0" max="100" value="50" aria-label="Reveal edited image on the left and original image on the right">
+                </div>
+                <div class="image-compare-labels"><span>Edited</span><span>Original</span></div>
+                <a id="imageDownload" class="primary image-download" download="protext-ai-edited.png">Save edited image</a>
             </div>
         </section>
-        <section id="historyView" hidden>
-            <div class="field-card">
-                <div class="field-head"><b>Saved rewrites</b>
-                    <button id="clearHistoryBtn" class="quiet-button">Clear history</button>
-                </div>
-                <div id="historyList" class="history-list"></div>
-            </div>
-        </section>
-        <div id="loadingLine" class="loading-line" hidden>
-            <div class="spinner"></div>
-            <div><b id="loadingText">Preparing private AI…</b>
-                <div class="progress-track">
-                    <div id="loadingFill"></div>
-                </div>
-            </div>
-        </div>
+        <section id="historyView" hidden><div class="field-card"><div class="field-head"><b>Saved rewrites</b><button id="clearHistoryBtn" class="quiet-button">Clear history</button></div><div id="historyList" class="history-list"></div></div></section>
+        <div id="loadingLine" class="loading-line" hidden><div class="spinner"></div><div><b id="loadingText">Preparing private AI…</b><div class="progress-track"><div id="loadingFill"></div></div></div></div>
         <div id="notice" class="notice" role="status" hidden></div>
-        <section id="resultCard" class="result-card" hidden>
-            <div class="result-head">
-                <div><span class="eyebrow">YOUR RESULT</span>
-                    <h2 id="resultLabel">Improved text</h2></div>
-                <div class="result-tools">
-                    <button id="copyBtn" class="icon-button tool-button" aria-label="Copy result" disabled title="Copy">
-                        ▢
-                    </button>
-                    <button id="regenerateBtn" class="icon-button tool-button" aria-label="Regenerate result" disabled
-                            title="Regenerate">↻
-                    </button>
-                    <button id="saveBtn" class="icon-button tool-button" aria-label="Save rewrite" disabled
-                            title="Save">♡
-                    </button>
-                </div>
-            </div>
-            <textarea id="resultText" readonly aria-label="Generated result"></textarea></section>
-        <div id="emptyResult" class="empty-result"><span>✧</span><b>Your result will appear here</b><small>Enter your
-            text above to get started.</small></div>
+        <section id="resultCard" class="result-card" hidden><div class="result-head"><div><span class="eyebrow">YOUR RESULT</span><h2 id="resultLabel">Improved text</h2></div><div class="result-tools"><button id="copyBtn" class="icon-button tool-button" aria-label="Copy result" disabled title="Copy">▢</button><button id="regenerateBtn" class="icon-button tool-button" aria-label="Regenerate result" disabled title="Regenerate">↻</button><button id="saveBtn" class="icon-button tool-button" aria-label="Save rewrite" disabled title="Save">♡</button></div></div><textarea id="resultText" readonly aria-label="Generated result"></textarea></section>
+        <div id="emptyResult" class="empty-result"><span>✧</span><b>Your result will appear here</b><small>Enter your text above to get started.</small></div>
     </main>
     <footer><span>🔒</span> Text AI runs locally. Image uploads require your explicit approval.</footer>
 </div>
