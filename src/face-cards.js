@@ -674,35 +674,50 @@ function drawScaled(source, size) {
 
 function renderWorkingCrop(outputSize) {
   if (!photo || !crop) {
-    throw new Error(
-      "Detect and select a face first."
-    );
+    throw new Error("Detect and select a face first.");
   }
 
-  const workingSize =
-    Math.min(2048, outputSize);
+  const sourceSize = crop.size;
 
-  const sourceSize =
-    Math.max(
-      1,
-      Math.round(crop.size)
+  // Draw directly from the original photo when possible.
+  // This preserves detail for 512, 1024, 2048 and 4096.
+  if (sourceSize <= outputSize * 2) {
+    const output = newCanvas(outputSize);
+    const ctx = output.getContext("2d");
+
+    if (!ctx) {
+      throw new Error("Canvas processing is unavailable.");
+    }
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    ctx.drawImage(
+      photo,
+      crop.x,
+      crop.y,
+      sourceSize,
+      sourceSize,
+      0,
+      0,
+      outputSize,
+      outputSize
     );
 
-  const initialSize =
-    Math.min(sourceSize, 4096);
+    return output;
+  }
 
-  let current =
-    newCanvas(initialSize);
-
-  const ctx = current.getContext(
-    "2d",
-    { alpha: false }
+  // Progressive downscaling for large source crops.
+  let stepSize = Math.min(
+    Math.ceil(sourceSize / 2),
+    4096
   );
 
+  let current = newCanvas(stepSize);
+  let ctx = current.getContext("2d");
+
   if (!ctx) {
-    throw new Error(
-      "Canvas processing is unavailable."
-    );
+    throw new Error("Canvas processing is unavailable.");
   }
 
   ctx.imageSmoothingEnabled = true;
@@ -712,43 +727,39 @@ function renderWorkingCrop(outputSize) {
     photo,
     crop.x,
     crop.y,
-    crop.size,
-    crop.size,
+    sourceSize,
+    sourceSize,
     0,
     0,
-    initialSize,
-    initialSize
+    stepSize,
+    stepSize
   );
 
-  // Progressive downsampling.
-  while (
-    current.width > workingSize * 2
-  ) {
+  while (stepSize > outputSize * 2) {
     const nextSize = Math.max(
-      workingSize,
-      Math.ceil(current.width / 2)
+      outputSize,
+      Math.ceil(stepSize / 2)
     );
 
-    const next =
-      drawScaled(current, nextSize);
+    const next = drawScaled(current, nextSize);
 
     current.width = 0;
     current.height = 0;
+
     current = next;
+    stepSize = nextSize;
   }
 
-  if (
-    current.width !== workingSize
-  ) {
-    const next =
-      drawScaled(current, workingSize);
-
-    current.width = 0;
-    current.height = 0;
-    current = next;
+  if (stepSize === outputSize) {
+    return current;
   }
 
-  return current;
+  const output = drawScaled(current, outputSize);
+
+  current.width = 0;
+  current.height = 0;
+
+  return output;
 }
 
 /*
@@ -759,175 +770,77 @@ function renderWorkingCrop(outputSize) {
  */
 
 function enhance(canvas, strength) {
-  if (strength === "natural") {
+  if (strength === "natural" || !strength) {
     return;
   }
 
-  const ctx = canvas.getContext(
-    "2d",
-    { willReadFrequently: true }
-  );
+  // Preserve full 4K detail.
+  // Avoid a forced 2K sharpening/downscaling stage.
+  if (canvas.width > 2048) {
+    return;
+  }
+
+  const ctx = canvas.getContext("2d", {
+    willReadFrequently: true
+  });
 
   if (!ctx) {
-    throw new Error(
-      "Image enhancement is unavailable."
-    );
+    throw new Error("Image enhancement is unavailable.");
   }
 
   const w = canvas.width;
   const h = canvas.height;
 
+  const original = ctx.getImageData(0, 0, w, h);
+  const src = original.data;
+
+  const result = ctx.createImageData(w, h);
+  const dst = result.data;
+
   const amount =
-    strength === "strong"
-      ? 0.40
-      : 0.22;
+    strength === "strong" ? 0.20 : 0.10;
 
-  const tileHeight = 96;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
 
-  let previousOriginalRow = null;
+      const left =
+        (y * w + Math.max(0, x - 1)) * 4;
 
-  for (
-    let top = 0;
-    top < h;
-    top += tileHeight
-  ) {
-    const rows =
-      Math.min(tileHeight, h - top);
+      const right =
+        (y * w + Math.min(w - 1, x + 1)) * 4;
 
-    const haloTop =
-      Math.max(0, top - 1);
+      const up =
+        (Math.max(0, y - 1) * w + x) * 4;
 
-    const haloBottom =
-      Math.min(
-        h,
-        top + rows + 1
-      );
+      const down =
+        (Math.min(h - 1, y + 1) * w + x) * 4;
 
-    const source =
-      ctx.getImageData(
-        0,
-        haloTop,
-        w,
-        haloBottom - haloTop
-      );
+      for (let c = 0; c < 3; c++) {
+        const center = src[i + c];
 
-    const output =
-      ctx.createImageData(w, rows);
+        const blur = (
+          4 * center +
+          src[left + c] +
+          src[right + c] +
+          src[up + c] +
+          src[down + c]
+        ) / 8;
 
-    const src = source.data;
-
-    if (previousOriginalRow) {
-      src.set(
-        previousOriginalRow,
-        0
-      );
-    }
-
-    if (top + rows < h) {
-      const lastStart =
-        (
-          (
-            top + rows - 1 - haloTop
-          ) * w
-        ) * 4;
-
-      previousOriginalRow =
-        src.slice(
-          lastStart,
-          lastStart + w * 4
+        dst[i + c] = clamp(
+          Math.round(
+            center + amount * (center - blur)
+          ),
+          0,
+          255
         );
-    }
-
-    const dst = output.data;
-
-    const sourceRows =
-      haloBottom - haloTop;
-
-    for (
-      let y = 0;
-      y < rows;
-      y++
-    ) {
-      const sy =
-        top + y - haloTop;
-
-      for (
-        let x = 0;
-        x < w;
-        x++
-      ) {
-        const si =
-          (sy * w + x) * 4;
-
-        const di =
-          (y * w + x) * 4;
-
-        const left =
-          (
-            sy * w +
-            Math.max(0, x - 1)
-          ) * 4;
-
-        const right =
-          (
-            sy * w +
-            Math.min(w - 1, x + 1)
-          ) * 4;
-
-        const up =
-          (
-            Math.max(0, sy - 1) * w +
-            x
-          ) * 4;
-
-        const down =
-          (
-            Math.min(
-              sourceRows - 1,
-              sy + 1
-            ) * w + x
-          ) * 4;
-
-        for (
-          let c = 0;
-          c < 3;
-          c++
-        ) {
-          const center =
-            src[si + c];
-
-          const blur =
-            (
-              4 * center +
-              src[left + c] +
-              src[right + c] +
-              src[up + c] +
-              src[down + c]
-            ) / 8;
-
-          dst[di + c] = clamp(
-            Math.round(
-              center +
-              amount * (
-                center - blur
-              )
-            ),
-            0,
-            255
-          );
-        }
-
-        dst[di + 3] =
-          src[si + 3];
       }
-    }
 
-    ctx.putImageData(
-      output,
-      0,
-      top
-    );
+      dst[i + 3] = src[i + 3];
+    }
   }
+
+  ctx.putImageData(result, 0, 0);
 }
 
 function canvasToBlob(canvas) {
@@ -951,43 +864,16 @@ function canvasToBlob(canvas) {
   );
 }
 
-async function renderCardBlob(
-  size,
-  strength
-) {
-  const working =
-    renderWorkingCrop(size);
-
-  let output = null;
+async function renderCardBlob(size, strength) {
+  const output = renderWorkingCrop(size);
 
   try {
-    enhance(
-      working,
-      strength
-    );
+    enhance(output, strength);
 
-    output =
-      size === working.width
-        ? working
-        : drawScaled(
-            working,
-            size
-          );
-
-    return await canvasToBlob(
-      output
-    );
+    return await canvasToBlob(output);
   } finally {
-    if (
-      output &&
-      output !== working
-    ) {
-      output.width = 0;
-      output.height = 0;
-    }
-
-    working.width = 0;
-    working.height = 0;
+    output.width = 0;
+    output.height = 0;
   }
 }
 
