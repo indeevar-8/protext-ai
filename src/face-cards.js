@@ -45,7 +45,9 @@ let cardURLs = [];
 let busy = false;
 let drag = null;
 
-const FACE_STUDIO_VERSION = "1.4.0";
+const FACE_STUDIO_VERSION = "1.5.0";
+
+const AI_MODEL_READY = false;
 
 let sourceInfo = {
   fileName: "",
@@ -70,6 +72,66 @@ function updateSourceDiagnostics() {
     `${w} × ${h} pixels · ` +
     `${(sourceInfo.fileSize / 1048576).toFixed(2)} MB · ` +
     `Face Studio ${FACE_STUDIO_VERSION}`;
+}
+
+
+function installEnhancementMode() {
+  if ($("faceEnhancementMode")) return;
+
+  const clarity = $("faceStrength");
+  if (!clarity) return;
+
+  const parent = clarity.parentElement;
+  if (!parent) return;
+
+  const label = document.createElement("label");
+  label.htmlFor = "faceEnhancementMode";
+  label.textContent = "Processing mode";
+  label.style.display = "block";
+  label.style.marginTop = "12px";
+  label.style.fontWeight = "600";
+
+  const select = document.createElement("select");
+  select.id = "faceEnhancementMode";
+  select.style.width = "100%";
+  select.style.marginTop = "6px";
+
+  select.add(new Option(
+    "Original Quality (no sharpening)", "original"
+  ));
+  select.add(new Option(
+    "Classic clarity (existing filters)", "classic"
+  ));
+
+  const aiOption = new Option(
+    "Offline AI Enhance (model not installed)", "ai"
+  );
+  aiOption.disabled = !AI_MODEL_READY;
+  select.add(aiOption);
+  select.value = "original";
+
+  const info = document.createElement("p");
+  info.id = "faceEnhancementInfo";
+  info.style.fontSize = "0.85rem";
+  info.style.opacity = "0.8";
+
+  parent.insertAdjacentElement("afterend", label);
+  label.insertAdjacentElement("afterend", select);
+  select.insertAdjacentElement("afterend", info);
+
+  function sync() {
+    const classic = select.value === "classic";
+    clarity.disabled = !classic;
+
+    info.textContent = classic
+      ? "Classic clarity uses the existing non-AI sharpening filter."
+      : select.value === "original"
+        ? "No sharpening or generated detail. Original photo pixels are used for export."
+        : "Offline AI model integration is pending validation on iPhone Safari.";
+  }
+
+  select.addEventListener("change", sync);
+  sync();
 }
 
 function message(text) {
@@ -947,9 +1009,17 @@ async function makeCard(index) {
     );
   }
 
-  const strength =
-    $("faceStrength")?.value ||
-    "balanced";
+  const mode = $("faceEnhancementMode")?.value || "original";
+
+  if (mode === "ai") {
+    throw new Error(
+      "Offline AI restoration is not installed yet."
+    );
+  }
+
+  const strength = mode === "classic"
+    ? ($("faceStrength")?.value || "balanced")
+    : "natural";
 
   message(
     `Rendering ${size} × ${size} face card locally...`
@@ -1125,6 +1195,7 @@ function init() {
 
   installStyles();
   installCropEditor();
+  installEnhancementMode();
 
   const resolution =
     $("faceResolution");
