@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@huggingface/inference": "^4.13.32",
+    "@mediapipe/tasks-vision": "^1.2.2",
     "@mlc-ai/web-llm": "^0.2.79",
     "@mlc-ai/web-tokenizers": "^0.1.0"
   },

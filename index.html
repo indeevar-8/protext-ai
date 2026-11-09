@@ -40,9 +40,25 @@
                 <label for="imageFile"><b>Choose an image</b></label><input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp">
                 <p class="image-help">PNG, JPEG or WebP • up to 20 MB • local edits stay on your device</p>
                 <label for="imagePrompt"><b>Describe your edit</b></label><textarea id="imagePrompt" placeholder="Example: Change the background to a beautiful sunset while preserving the subject."></textarea>
-                <label for="imageMode"><b>Processing</b></label><select id="imageMode"><option value="local">Private local enhancement</option><option value="online">Advanced online AI (requires consent)</option></select>
+                <label for="imageMode"><b>Processing</b></label><select id="imageMode"><option value="local">Private local enhancement</option><option value="online">Advanced online AI (requires consent)</option><option value="face">Offline face cards</option></select>
                 <div id="imageLocalOptions"><label for="imagePreset"><b>Local enhancement preset</b></label><select id="imagePreset"><option value="auto">Natural enhancement</option><option value="bright">Brighten</option><option value="contrast">Increase contrast</option><option value="grayscale">Black and white</option><option value="original">Keep original</option></select><p class="image-help">Local presets are deterministic photo adjustments, not generative AI. The prompt is checked for supported local edits.</p></div>
                 <div id="imageOnlineOptions" hidden><p class="image-warning">Online editing sends a resized version of your image and your prompt to Cloudflare Workers AI. Nothing is uploaded until you approve.</p><label class="image-consent"><input type="checkbox" id="imageConsent"> I approve sending this image and prompt to the configured online AI service.</label><p class="image-help">A private access key is required for testing. Never add API keys to browser source code.</p></div>
+                <div id="imageFaceOptions" class="face-options" hidden>
+                    <p class="image-help">Face detection and enhancement run on this device. First-time setup requires locally installed model files.</p>
+                    <button id="faceDetectBtn" type="button" class="primary">Detect faces locally</button>
+                    <p id="faceStatus" role="status" aria-live="polite"></p>
+                    <div id="faceSelection" hidden>
+                        <div class="face-stage"><img id="faceSourcePreview" alt="Photo with detected faces"><div id="faceBoxes"></div></div>
+                        <p class="image-help">Tap a face box to select it.</p>
+                        <label for="faceResolution"><b>Card size</b></label>
+                        <select id="faceResolution"><option value="512">512 × 512</option><option value="1024" selected>1024 × 1024</option></select>
+                        <label for="faceStrength"><b>Enhancement</b></label>
+                        <select id="faceStrength"><option value="natural">Natural</option><option value="balanced" selected>Balanced</option><option value="strong">Strong</option></select>
+                        <button id="faceCreateBtn" type="button" class="primary">Create selected face card</button>
+                        <button id="faceCreateAllBtn" type="button">Create cards for all detected faces</button>
+                    </div>
+                    <div id="faceCards" class="face-card-grid"></div>
+                </div>
                 <button id="imageProcess" class="primary" type="button">Process image</button><p id="imageStatus" role="status" aria-live="polite" class="image-help"></p>
             </div>
             <div id="imageComparison" class="field-card image-comparison" hidden>
@@ -66,5 +82,6 @@
     <footer><span>🔒</span> Text AI runs locally. Image uploads require your explicit approval.</footer>
 </div>
 <script type="module" src="./src/main.js"></script>
+<script type="module" src="./src/face-cards.js"></script>
 </body>
 </html>

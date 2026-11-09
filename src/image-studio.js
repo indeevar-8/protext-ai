@@ -1,3 +1,4 @@
+
 // ProText AI Image Studio: offline presets + optional authenticated online editing.
 // Do not put IMAGE_ACCESS_KEY or other secrets in this file.
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -240,12 +241,16 @@ export function initImageStudio() {
 
   mode.addEventListener("change", () => {
     $("imageLocalOptions").hidden = mode.value !== "local";
+    const faceOptions = $("imageFaceOptions");
+    if (faceOptions) faceOptions.hidden = mode.value !== "face";
     $("imageOnlineOptions").hidden = mode.value !== "online";
+    process.hidden = mode.value === "face";
     $("imageConsent").checked = false;
     releaseResults();
     status("");
   });
   fileInput.addEventListener("change", () => { releaseResults(); status(""); });
+  if (mode.value === "face") { process.hidden = true; $("imageLocalOptions").hidden = true; $("imageFaceOptions").hidden = false; }
   process.addEventListener("click", async () => {
     if (processing) return;
     const file = fileInput.files?.[0];

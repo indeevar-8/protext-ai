@@ -41,3 +41,17 @@ footer{display:flex;justify-content:center;gap:8px;text-align:center;color:#8a95
 .image-compare-labels{display:flex;justify-content:space-between;margin:10px 0 18px;font-size:13px;font-weight:600;color:#34445c}
 @media(min-width:620px){.app-shell{padding-left:30px;padding-right:30px}.page-heading{padding-top:43px}#rawText,#promptRaw{height:170px}}
 @media(max-width:420px){.image-compare-grid{grid-template-columns:1fr}.field-card,.result-card{padding:14px}.image-slider-divider::after{width:34px;height:34px;font-size:18px}.image-compare-labels{font-size:12px}}
+
+
+/* Offline face cards (scoped to avoid altering Image Studio comparison) */
+.face-options{display:grid;gap:12px}
+.face-stage{position:relative;line-height:0;max-width:100%;overflow:hidden;border-radius:12px;background:#e8edf5}
+.face-stage img{display:block;width:100%;height:auto}
+#faceBoxes{position:absolute;inset:0}
+.face-box{position:absolute;border:2px solid #45b8ff;background:#45b8ff20;border-radius:5px;cursor:pointer;padding:0;min-width:16px;min-height:16px}
+.face-box.selected{border-color:#ffcf40;background:#ffcf402c;box-shadow:0 0 0 2px #202a40}
+.face-card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.face-card-item{display:grid;gap:8px;padding:10px;border:1px solid #e1e7ef;border-radius:12px}
+.face-card-item img{width:100%;aspect-ratio:1;object-fit:contain;background:#eef1f6;border-radius:8px}
+.face-card-item a{display:block;text-align:center;padding:10px;background:#293f63;color:white;border-radius:8px;text-decoration:none}
+#faceStatus{font-size:12px;color:#34445c;margin:0}
