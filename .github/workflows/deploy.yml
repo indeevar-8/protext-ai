@@ -15,18 +15,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - run: npm install
-      - run: npm run build
+      - name: Install dependencies
+        run: npm ci
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Prepare offline MediaPipe assets
+        run: |
+          mkdir -p public/mediapipe/wasm public/models
+          cp node_modules/@mediapipe/tasks-vision/wasm/* public/mediapipe/wasm/
+          curl -fL --retry 3 \
+            "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite" \
+            -o public/models/blaze_face_short_range.tflite
+
+      - name: Build ProText AI
+        run: npm run build
+
+      - name: Verify face detection assets
+        run: |
+          test -s dist/models/blaze_face_short_range.tflite
+          test -s dist/mediapipe/wasm/vision_wasm_internal.wasm
+          echo "Offline face detection assets verified."
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: ./dist
 
   deploy:
     needs: build
@@ -37,5 +57,6 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - id: deployment
+      - name: Deploy GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
