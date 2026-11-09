@@ -45,6 +45,33 @@ let cardURLs = [];
 let busy = false;
 let drag = null;
 
+const FACE_STUDIO_VERSION = "1.4.0";
+
+let sourceInfo = {
+  fileName: "",
+  fileSize: 0,
+  decodedWidth: 0,
+  decodedHeight: 0
+};
+
+function updateSourceDiagnostics() {
+  const details = $("faceFileDetails");
+
+  if (!details || !photo) return;
+
+  const w = photo.naturalWidth;
+  const h = photo.naturalHeight;
+
+  sourceInfo.decodedWidth = w;
+  sourceInfo.decodedHeight = h;
+
+  details.textContent =
+    `${sourceInfo.fileName} · ` +
+    `${w} × ${h} pixels · ` +
+    `${(sourceInfo.fileSize / 1048576).toFixed(2)} MB · ` +
+    `Face Studio ${FACE_STUDIO_VERSION}`;
+}
+
 function message(text) {
   const el = $("faceStatus");
   if (el) el.textContent = text;
@@ -237,29 +264,26 @@ function updatePersonPicker() {
 function updateQualityInfo() {
   const el = $("faceCropQuality");
 
-  if (!el || !crop) return;
+  if (!el || !crop || !photo) return;
 
   const pixels = Math.round(crop.size);
+  const exportSize = Number(
+    $("faceResolution")?.value || 1024
+  );
 
-  let rating;
-  let explanation;
+  const scale = exportSize / pixels;
 
-  if (pixels >= 800) {
-    rating = "Good source resolution";
-    explanation =
-      "The selected crop contains substantial source detail.";
-  } else if (pixels >= 350) {
-    rating = "Moderate source resolution";
-    explanation =
-      "Some enlargement is needed for larger cards.";
-  } else {
-    rating = "Low source resolution";
-    explanation =
-      "Enlargement cannot recover missing facial details.";
-  }
+  const rating =
+    pixels >= 800 ? "Good" :
+    pixels >= 350 ? "Moderate" :
+    "Low";
 
   el.textContent =
-    `${rating} — ${pixels} × ${pixels} source pixels. ${explanation}`;
+    `Source: ${imageWidth()} × ${imageHeight()} | ` +
+    `Crop: ${pixels} × ${pixels} | ` +
+    `Export: ${exportSize} × ${exportSize} | ` +
+    `Scale: ${scale.toFixed(2)}× | ` +
+    `Source detail: ${rating}`;
 }
 
 function updateCropUI() {
@@ -565,6 +589,23 @@ async function detectFaces() {
   const loadedPhoto = photo;
 
   await loadedPhoto.decode();
+  if (generation !== faceGeneration) {
+    return;
+  }
+
+  sourceInfo.fileName = file.name;
+  sourceInfo.fileSize = file.size;
+
+  updateSourceDiagnostics();
+
+  console.info("Face Studio diagnostics", {
+    version: FACE_STUDIO_VERSION,
+    device: navigator.userAgent,
+    fileName: file.name,
+    fileBytes: file.size,
+    decodedWidth: loadedPhoto.naturalWidth,
+    decodedHeight: loadedPhoto.naturalHeight
+  });
 
   if (generation !== faceGeneration) {
     return;
@@ -1295,6 +1336,10 @@ function init() {
   window.addEventListener(
     "pagehide",
     reset
+  );
+  $("faceResolution")?.addEventListener(
+    "change",
+    updateQualityInfo
   );
 }
 
