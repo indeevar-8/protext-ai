@@ -1,22 +1,23 @@
 
 /*
- * ProText AI — Offline Face Cards Phase 1.1
+ * ProText AI — Face Studio 1.3
+ *
+ * Fully offline face card processing.
  *
  * Features:
  * - Local MediaPipe face detection
  * - Multiple-face selection
- * - Adjustable square crop
+ * - Single adjustable square crop
  * - Drag to move crop
- * - Drag bottom-right handle to resize crop
- * - Crop zoom and position controls
- * - Reset crop
- * - Progressive high-quality image resizing
- * - Gentle local sharpening
- * - Source resolution quality indicator
- * - 512 / 1024 / 2048 PNG export
+ * - Drag corner handle to resize
+ * - Zoom slider and crop reset
+ * - Photo thumbnail, replace and remove
+ * - Source-resolution quality indicator
+ * - Progressive image resizing
+ * - Memory-conscious sharpening
+ * - 512, 1024, 2048 and 4096 PNG export
  *
- * No network requests are made by this module.
- * MediaPipe model and WASM assets must be hosted locally.
+ * MediaPipe model and WASM files must be hosted locally.
  */
 
 import {
@@ -68,8 +69,7 @@ function clearCards() {
 
   cardURLs = [];
 
-  const container = $("faceCards");
-  if (container) container.replaceChildren();
+  $("faceCards")?.replaceChildren();
 }
 
 function reset() {
@@ -107,25 +107,25 @@ async function getDetector() {
     `${BASE}mediapipe/wasm`
   );
 
-  detector = await FaceDetector.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath:
-        `${BASE}models/blaze_face_short_range.tflite`,
-      delegate: "CPU"
-    },
-    runningMode: "IMAGE",
-    minDetectionConfidence: 0.5
-  });
+  detector = await FaceDetector.createFromOptions(
+    vision,
+    {
+      baseOptions: {
+        modelAssetPath:
+          `${BASE}models/blaze_face_short_range.tflite`,
+        delegate: "CPU"
+      },
+      runningMode: "IMAGE",
+      minDetectionConfidence: 0.5
+    }
+  );
 
   return detector;
 }
 
 /*
- * All crop coordinates are stored in ORIGINAL
- * image pixels, not CSS/display pixels.
- *
- * This avoids quality loss from repeatedly
- * cropping an already resized preview.
+ * Crop coordinates are stored in original
+ * image pixels to preserve source quality.
  */
 
 function normalizeCrop() {
@@ -161,8 +161,6 @@ function automaticCrop(faceIndex) {
   const w = imageWidth();
   const h = imageHeight();
 
-  // Include forehead, chin and some surroundings.
-  // Use a tighter starting crop than Phase 1.
   const desiredSize = Math.max(
     box.width * 1.45,
     box.height * 1.55
@@ -194,6 +192,7 @@ function selectFace(index) {
   if (!faces[index]) return;
 
   selected = index;
+
   automaticCrop(index);
   drawFaceBoxes();
   updatePersonPicker();
@@ -205,7 +204,6 @@ function selectFace(index) {
 }
 
 function drawFaceBoxes() {
-  // Face detection boxes intentionally hidden.
   // Only the editable crop frame is displayed.
   $("faceBoxes")?.replaceChildren();
 }
@@ -224,9 +222,13 @@ function updatePersonPicker() {
 
     button.type = "button";
     button.textContent = `Face ${index + 1}`;
-    button.className = index === selected ? "active" : "";
+    button.className =
+      index === selected ? "active" : "";
 
-    button.addEventListener("click", () => selectFace(index));
+    button.addEventListener(
+      "click",
+      () => selectFace(index)
+    );
 
     host.appendChild(button);
   });
@@ -249,11 +251,11 @@ function updateQualityInfo() {
   } else if (pixels >= 350) {
     rating = "Moderate source resolution";
     explanation =
-      "Some enlargement is needed for a 1024px card.";
+      "Some enlargement is needed for larger cards.";
   } else {
     rating = "Low source resolution";
     explanation =
-      "The crop contains limited detail. Enlargement cannot recover missing facial features.";
+      "Enlargement cannot recover missing facial details.";
   }
 
   el.textContent =
@@ -262,6 +264,7 @@ function updateQualityInfo() {
 
 function updateCropUI() {
   const frame = $("faceCropFrame");
+
   if (!frame || !crop || !photo) return;
 
   normalizeCrop();
@@ -311,7 +314,6 @@ function resizeCrop(factor) {
   );
 
   crop.size = newSize;
-
   crop.x = centerX - newSize / 2;
   crop.y = centerY - newSize / 2;
 
@@ -324,21 +326,35 @@ function updateZoomControl() {
 
   if (!slider || !crop || !photo) return;
 
-  const max = Math.min(imageWidth(), imageHeight());
+  const max = Math.min(
+    imageWidth(),
+    imageHeight()
+  );
 
   const value =
-    100 * Math.log(max / crop.size) / Math.log(max / 24);
+    100 *
+    Math.log(max / crop.size) /
+    Math.log(max / 24);
 
-  slider.value = String(clamp(value, 0, 100));
+  slider.value = String(
+    clamp(value, 0, 100)
+  );
 }
 
 function setZoom(value) {
   if (!crop || !photo) return;
 
-  const max = Math.min(imageWidth(), imageHeight());
+  const max = Math.min(
+    imageWidth(),
+    imageHeight()
+  );
 
   const size =
-    max / Math.pow(max / 24, Number(value) / 100);
+    max /
+    Math.pow(
+      max / 24,
+      Number(value) / 100
+    );
 
   resizeCrop(size / crop.size);
 }
@@ -406,80 +422,86 @@ function installCropEditor() {
   frame.appendChild(handle);
   stage.appendChild(frame);
 
-  // Controls are provided by index.html
-  // to avoid duplicate buttons.
+  frame.addEventListener(
+    "pointerdown",
+    event => {
+      if (!crop || !photo) return;
 
-  /*
-   * Pointer events support mouse and touch.
-   * Coordinates are converted from preview CSS pixels
-   * into original image pixels.
-   */
+      if (
+        event.button !== undefined &&
+        event.button !== 0
+      ) {
+        return;
+      }
 
-  frame.addEventListener("pointerdown", event => {
-    if (!crop || !photo) return;
+      event.preventDefault();
 
-    if (
-      event.button !== undefined &&
-      event.button !== 0
-    ) {
-      return;
-    }
+      const rect =
+        stage.getBoundingClientRect();
 
-    event.preventDefault();
+      drag = {
+        id: event.pointerId,
+        mode:
+          event.target === handle
+            ? "resize"
+            : "move",
+        startX: event.clientX,
+        startY: event.clientY,
+        crop: { ...crop },
+        scaleX:
+          imageWidth() / rect.width,
+        scaleY:
+          imageHeight() / rect.height
+      };
 
-    const rect = stage.getBoundingClientRect();
-
-    drag = {
-      id: event.pointerId,
-      mode:
-        event.target === handle
-          ? "resize"
-          : "move",
-      startX: event.clientX,
-      startY: event.clientY,
-      crop: { ...crop },
-      scaleX: imageWidth() / rect.width,
-      scaleY: imageHeight() / rect.height
-    };
-
-    frame.setPointerCapture(event.pointerId);
-  });
-
-  frame.addEventListener("pointermove", event => {
-    if (!drag || drag.id !== event.pointerId) {
-      return;
-    }
-
-    const dx =
-      (event.clientX - drag.startX) * drag.scaleX;
-
-    const dy =
-      (event.clientY - drag.startY) * drag.scaleY;
-
-    if (drag.mode === "move") {
-      crop.x = drag.crop.x + dx;
-      crop.y = drag.crop.y + dy;
-      crop.size = drag.crop.size;
-    } else {
-      // Resize from the bottom-right corner.
-      const delta = Math.max(dx, dy);
-
-      crop.x = drag.crop.x;
-      crop.y = drag.crop.y;
-
-      crop.size = clamp(
-        drag.crop.size + delta,
-        24,
-        Math.min(
-          imageWidth() - crop.x,
-          imageHeight() - crop.y
-        )
+      frame.setPointerCapture(
+        event.pointerId
       );
     }
+  );
 
-    normalizeCrop();
-    updateCropUI();
-  });
+  frame.addEventListener(
+    "pointermove",
+    event => {
+      if (
+        !drag ||
+        drag.id !== event.pointerId
+      ) {
+        return;
+      }
+
+      const dx =
+        (event.clientX - drag.startX) *
+        drag.scaleX;
+
+      const dy =
+        (event.clientY - drag.startY) *
+        drag.scaleY;
+
+      if (drag.mode === "move") {
+        crop.x = drag.crop.x + dx;
+        crop.y = drag.crop.y + dy;
+        crop.size = drag.crop.size;
+      } else {
+        const delta = Math.max(dx, dy);
+
+        crop.x = drag.crop.x;
+        crop.y = drag.crop.y;
+
+        crop.size = clamp(
+          drag.crop.size + delta,
+          24,
+          Math.min(
+            imageWidth() - crop.x,
+            imageHeight() - crop.y
+          )
+        );
+      }
+
+      normalizeCrop();
+      updateCropUI();
+    }
+  );
 
   const finishDrag = event => {
     if (drag?.id === event.pointerId) {
@@ -487,19 +509,32 @@ function installCropEditor() {
     }
   };
 
-  frame.addEventListener("pointerup", finishDrag);
-  frame.addEventListener("pointercancel", finishDrag);
+  frame.addEventListener(
+    "pointerup",
+    finishDrag
+  );
 
-  frame.addEventListener("lostpointercapture", () => {
-    drag = null;
-  });
+  frame.addEventListener(
+    "pointercancel",
+    finishDrag
+  );
+
+  frame.addEventListener(
+    "lostpointercapture",
+    () => {
+      drag = null;
+    }
+  );
 }
 
 async function detectFaces() {
-  const file = $("faceFile")?.files?.[0];
+  const file =
+    $("faceFile")?.files?.[0];
 
   if (!file) {
-    throw new Error("Choose a photo first.");
+    throw new Error(
+      "Choose a photo first."
+    );
   }
 
   const allowed = [
@@ -521,7 +556,8 @@ async function detectFaces() {
 
   const generation = faceGeneration;
 
-  sourceURL = URL.createObjectURL(file);
+  sourceURL =
+    URL.createObjectURL(file);
 
   photo = new Image();
   photo.src = sourceURL;
@@ -530,7 +566,9 @@ async function detectFaces() {
 
   await loadedPhoto.decode();
 
-  if (generation !== faceGeneration) return;
+  if (generation !== faceGeneration) {
+    return;
+  }
 
   if (
     imageWidth() * imageHeight() >
@@ -541,15 +579,23 @@ async function detectFaces() {
     );
   }
 
-  message("Detecting faces on this device...");
+  message(
+    "Detecting faces on this device..."
+  );
 
-  const localDetector = await getDetector();
+  const localDetector =
+    await getDetector();
 
-  if (generation !== faceGeneration) return;
+  if (generation !== faceGeneration) {
+    return;
+  }
 
-  const result = localDetector.detect(photo);
+  const result =
+    localDetector.detect(photo);
 
-  faces = (result.detections || []).filter(
+  faces = (
+    result.detections || []
+  ).filter(
     detection =>
       detection.boundingBox?.width > 0 &&
       detection.boundingBox?.height > 0
@@ -562,7 +608,9 @@ async function detectFaces() {
     return;
   }
 
-  $("faceSourcePreview").src = sourceURL;
+  $("faceSourcePreview").src =
+    sourceURL;
+
   $("faceSelection").hidden = false;
 
   selected = 0;
@@ -577,233 +625,466 @@ async function detectFaces() {
 }
 
 /*
- * Progressive image resizing.
+ * Face Studio 1.3 rendering.
  *
- * For large source crops, resize in stages.
- * This can reduce aliasing compared with a single
- * large downscale operation.
+ * Work at a maximum of 2048 pixels.
+ * Apply sharpening before final 4K enlargement.
  *
- * It does not invent missing image details.
+ * This avoids creating several full-resolution
+ * 4096px processing buffers.
  */
 
-function renderCrop(size) {
-  if (!photo || !crop) {
-    throw new Error("Detect and select a face first.");
-  }
+function newCanvas(size) {
+  const canvas =
+    document.createElement("canvas");
 
-  const sourceSize = crop.size;
+  canvas.width = size;
+  canvas.height = size;
 
-  let current = document.createElement("canvas");
+  return canvas;
+}
 
-  const initialSize = Math.max(
-    1,
-    Math.round(sourceSize)
+function drawScaled(source, size) {
+  const next = newCanvas(size);
+
+  const ctx = next.getContext(
+    "2d",
+    { alpha: false }
   );
 
-  current.width = initialSize;
-  current.height = initialSize;
-
-  const firstContext = current.getContext("2d");
-
-  if (!firstContext) {
-    throw new Error("Canvas is unavailable.");
-  }
-
-  firstContext.imageSmoothingEnabled = true;
-  firstContext.imageSmoothingQuality = "high";
-
-  firstContext.drawImage(
-    photo,
-    crop.x,
-    crop.y,
-    sourceSize,
-    sourceSize,
-    0,
-    0,
-    initialSize,
-    initialSize
-  );
-
-  // Gradually reduce large crops.
-  while (current.width > size * 2) {
-    const nextSize = Math.max(
-      size,
-      Math.floor(current.width / 2)
+  if (!ctx) {
+    throw new Error(
+      "Canvas processing is unavailable."
     );
-
-    const next = document.createElement("canvas");
-
-    next.width = nextSize;
-    next.height = nextSize;
-
-    const context = next.getContext("2d");
-
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
-
-    context.drawImage(
-      current,
-      0,
-      0,
-      nextSize,
-      nextSize
-    );
-
-    current = next;
   }
 
-  const output = document.createElement("canvas");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
 
-  output.width = size;
-  output.height = size;
-
-  const context = output.getContext("2d", {
-    willReadFrequently: true
-  });
-
-  if (!context) {
-    throw new Error("Output canvas unavailable.");
-  }
-
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-
-  context.drawImage(
-    current,
+  ctx.drawImage(
+    source,
     0,
     0,
     size,
     size
   );
 
-  return output;
+  return next;
+}
+
+function renderWorkingCrop(outputSize) {
+  if (!photo || !crop) {
+    throw new Error(
+      "Detect and select a face first."
+    );
+  }
+
+  const workingSize =
+    Math.min(2048, outputSize);
+
+  const sourceSize =
+    Math.max(
+      1,
+      Math.round(crop.size)
+    );
+
+  const initialSize =
+    Math.min(sourceSize, 4096);
+
+  let current =
+    newCanvas(initialSize);
+
+  const ctx = current.getContext(
+    "2d",
+    { alpha: false }
+  );
+
+  if (!ctx) {
+    throw new Error(
+      "Canvas processing is unavailable."
+    );
+  }
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  ctx.drawImage(
+    photo,
+    crop.x,
+    crop.y,
+    crop.size,
+    crop.size,
+    0,
+    0,
+    initialSize,
+    initialSize
+  );
+
+  // Progressive downsampling.
+  while (
+    current.width > workingSize * 2
+  ) {
+    const nextSize = Math.max(
+      workingSize,
+      Math.ceil(current.width / 2)
+    );
+
+    const next =
+      drawScaled(current, nextSize);
+
+    current.width = 0;
+    current.height = 0;
+    current = next;
+  }
+
+  if (
+    current.width !== workingSize
+  ) {
+    const next =
+      drawScaled(current, workingSize);
+
+    current.width = 0;
+    current.height = 0;
+    current = next;
+  }
+
+  return current;
 }
 
 /*
- * Gentle sharpening:
- * improves local edge contrast without changing
- * facial geometry or synthesizing new features.
+ * Tile-based sharpening.
+ *
+ * Reads only a small image strip at a time,
+ * rather than a complete 4K RGBA pixel array.
  */
 
 function enhance(canvas, strength) {
-  if (strength === "natural") return;
+  if (strength === "natural") {
+    return;
+  }
 
-  const context = canvas.getContext("2d", {
-    willReadFrequently: true
-  });
+  const ctx = canvas.getContext(
+    "2d",
+    { willReadFrequently: true }
+  );
+
+  if (!ctx) {
+    throw new Error(
+      "Image enhancement is unavailable."
+    );
+  }
 
   const w = canvas.width;
   const h = canvas.height;
 
-  const image = context.getImageData(
-    0,
-    0,
-    w,
-    h
-  );
-
-  const data = image.data;
-  const original = new Uint8ClampedArray(data);
-
   const amount =
-    strength === "strong" ? 0.34 : 0.17;
+    strength === "strong"
+      ? 0.40
+      : 0.22;
 
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const i = (y * w + x) * 4;
+  const tileHeight = 96;
 
-      for (let channel = 0; channel < 3; channel++) {
-        const center = original[i + channel];
+  let previousOriginalRow = null;
 
-        const neighbors =
-          original[i - 4 + channel] +
-          original[i + 4 + channel] +
-          original[i - w * 4 + channel] +
-          original[i + w * 4 + channel];
+  for (
+    let top = 0;
+    top < h;
+    top += tileHeight
+  ) {
+    const rows =
+      Math.min(tileHeight, h - top);
 
-        const blur =
-          (center * 4 + neighbors) / 8;
+    const haloTop =
+      Math.max(0, top - 1);
 
-        data[i + channel] = clamp(
-          center + amount * (center - blur),
-          0,
-          255
+    const haloBottom =
+      Math.min(
+        h,
+        top + rows + 1
+      );
+
+    const source =
+      ctx.getImageData(
+        0,
+        haloTop,
+        w,
+        haloBottom - haloTop
+      );
+
+    const output =
+      ctx.createImageData(w, rows);
+
+    const src = source.data;
+
+    if (previousOriginalRow) {
+      src.set(
+        previousOriginalRow,
+        0
+      );
+    }
+
+    if (top + rows < h) {
+      const lastStart =
+        (
+          (
+            top + rows - 1 - haloTop
+          ) * w
+        ) * 4;
+
+      previousOriginalRow =
+        src.slice(
+          lastStart,
+          lastStart + w * 4
         );
+    }
+
+    const dst = output.data;
+
+    const sourceRows =
+      haloBottom - haloTop;
+
+    for (
+      let y = 0;
+      y < rows;
+      y++
+    ) {
+      const sy =
+        top + y - haloTop;
+
+      for (
+        let x = 0;
+        x < w;
+        x++
+      ) {
+        const si =
+          (sy * w + x) * 4;
+
+        const di =
+          (y * w + x) * 4;
+
+        const left =
+          (
+            sy * w +
+            Math.max(0, x - 1)
+          ) * 4;
+
+        const right =
+          (
+            sy * w +
+            Math.min(w - 1, x + 1)
+          ) * 4;
+
+        const up =
+          (
+            Math.max(0, sy - 1) * w +
+            x
+          ) * 4;
+
+        const down =
+          (
+            Math.min(
+              sourceRows - 1,
+              sy + 1
+            ) * w + x
+          ) * 4;
+
+        for (
+          let c = 0;
+          c < 3;
+          c++
+        ) {
+          const center =
+            src[si + c];
+
+          const blur =
+            (
+              4 * center +
+              src[left + c] +
+              src[right + c] +
+              src[up + c] +
+              src[down + c]
+            ) / 8;
+
+          dst[di + c] = clamp(
+            Math.round(
+              center +
+              amount * (
+                center - blur
+              )
+            ),
+            0,
+            255
+          );
+        }
+
+        dst[di + 3] =
+          src[si + 3];
       }
     }
-  }
 
-  context.putImageData(image, 0, 0);
+    ctx.putImageData(
+      output,
+      0,
+      top
+    );
+  }
 }
 
 function canvasToBlob(canvas) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(blob => {
-      if (blob) resolve(blob);
-      else reject(new Error("PNG export failed."));
-    }, "image/png");
-  });
+  return new Promise(
+    (resolve, reject) => {
+      canvas.toBlob(
+        blob => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(
+              new Error(
+                "PNG export failed."
+              )
+            );
+          }
+        },
+        "image/png"
+      );
+    }
+  );
+}
+
+async function renderCardBlob(
+  size,
+  strength
+) {
+  const working =
+    renderWorkingCrop(size);
+
+  let output = null;
+
+  try {
+    enhance(
+      working,
+      strength
+    );
+
+    output =
+      size === working.width
+        ? working
+        : drawScaled(
+            working,
+            size
+          );
+
+    return await canvasToBlob(
+      output
+    );
+  } finally {
+    if (
+      output &&
+      output !== working
+    ) {
+      output.width = 0;
+      output.height = 0;
+    }
+
+    working.width = 0;
+    working.height = 0;
+  }
 }
 
 async function makeCard(index) {
   if (!faces[index]) {
-    throw new Error("Select a detected face first.");
+    throw new Error(
+      "Select a detected face first."
+    );
   }
 
-  // For multi-face export, each face gets its
-  // own automatic crop. For a single card,
-  // preserve the user's adjusted crop.
   if (index !== selected) {
     automaticCrop(index);
   }
 
   const size = Number(
-    $("faceResolution")?.value || 1024
+    $("faceResolution")?.value ||
+    1024
   );
 
-  if (![512, 1024, 2048].includes(size)) {
-    throw new Error("Invalid card resolution.");
+  if (
+    ![
+      512,
+      1024,
+      2048,
+      4096
+    ].includes(size)
+  ) {
+    throw new Error(
+      "Invalid card resolution."
+    );
   }
 
   const strength =
-    $("faceStrength")?.value || "balanced";
+    $("faceStrength")?.value ||
+    "balanced";
 
-  const canvas = renderCrop(size);
+  message(
+    `Rendering ${size} × ${size} face card locally...`
+  );
 
-  enhance(canvas, strength);
+  const blob =
+    await renderCardBlob(
+      size,
+      strength
+    );
 
-  const blob = await canvasToBlob(canvas);
-  const url = URL.createObjectURL(blob);
+  const url =
+    URL.createObjectURL(blob);
 
   cardURLs.push(url);
 
-  const item = document.createElement("div");
-  item.className = "face-card-item";
+  const item =
+    document.createElement("div");
 
-  const preview = document.createElement("img");
+  item.className =
+    "face-card-item";
+
+  const preview =
+    document.createElement("img");
+
   preview.src = url;
-  preview.alt = `Face ${index + 1} card`;
+  preview.alt =
+    `Face ${index + 1} card`;
 
-  const title = document.createElement("strong");
+  const title =
+    document.createElement("strong");
+
   title.textContent =
     `Face ${index + 1} — ${size} × ${size}`;
 
-  const download = document.createElement("a");
+  const download =
+    document.createElement("a");
 
   download.href = url;
+
   download.download =
     `protext-face-${index + 1}-${size}.png`;
 
-  download.textContent = "Save face card";
+  download.textContent =
+    "Save face card";
 
-  item.append(preview, title, download);
+  item.append(
+    preview,
+    title,
+    download
+  );
 
-  $("faceCards").appendChild(item);
+  $("faceCards").appendChild(
+    item
+  );
 }
 
 async function createSelectedCard() {
   if (!faces.length || !crop) {
-    throw new Error("Detect a face first.");
+    throw new Error(
+      "Detect a face first."
+    );
   }
 
   clearCards();
@@ -817,13 +1098,18 @@ async function createSelectedCard() {
 
 async function createAllCards() {
   if (!faces.length) {
-    throw new Error("Detect faces first.");
+    throw new Error(
+      "Detect faces first."
+    );
   }
 
   clearCards();
 
-  const originalSelected = selected;
-  const originalCrop = { ...crop };
+  const originalSelected =
+    selected;
+
+  const originalCrop =
+    { ...crop };
 
   try {
     for (
@@ -833,8 +1119,12 @@ async function createAllCards() {
     ) {
       selected = index;
 
-      if (index === originalSelected) {
-        crop = { ...originalCrop };
+      if (
+        index === originalSelected
+      ) {
+        crop = {
+          ...originalCrop
+        };
       } else {
         automaticCrop(index);
       }
@@ -842,8 +1132,11 @@ async function createAllCards() {
       await makeCard(index);
     }
   } finally {
-    selected = originalSelected;
-    crop = originalCrop;
+    selected =
+      originalSelected;
+
+    crop =
+      originalCrop;
 
     drawFaceBoxes();
     updateCropUI();
@@ -866,49 +1159,90 @@ async function run(action) {
     $("faceCreateAllBtn")
   ].filter(Boolean);
 
-  buttons.forEach(button => {
-    button.disabled = true;
-  });
+  buttons.forEach(
+    button => {
+      button.disabled = true;
+    }
+  );
 
   try {
     await action();
   } catch (error) {
-    console.error("Face Cards:", error);
+    console.error(
+      "Face Cards:",
+      error
+    );
 
     message(
       "Face processing failed: " +
-      (error?.message || String(error))
+      (
+        error?.message ||
+        String(error)
+      )
     );
   } finally {
     busy = false;
 
-    buttons.forEach(button => {
-      button.disabled = false;
-    });
+    buttons.forEach(
+      button => {
+        button.disabled = false;
+      }
+    );
   }
 }
 
 function init() {
-  if (!$("imageFaceOptions")) return;
+  if (!$("imageFaceOptions")) {
+    return;
+  }
 
   installStyles();
   installCropEditor();
 
-  const resolution = $("faceResolution");
+  const resolution =
+    $("faceResolution");
 
-  // Add 2048px export without requiring HTML changes.
-  if (
-    resolution &&
-    !Array.from(resolution.options)
-      .some(option => option.value === "2048")
-  ) {
-    const option = document.createElement("option");
+  // Preserve existing export options.
+  // Add 2K and 4K if not already present.
 
-    option.value = "2048";
-    option.textContent =
-      "2048 × 2048 (experimental)";
+  if (resolution) {
+    const sizes = [
+      [
+        "2048",
+        "2048 × 2048 (2K)"
+      ],
+      [
+        "4096",
+        "4096 × 4096 (4K, slower)"
+      ]
+    ];
 
-    resolution.appendChild(option);
+    for (
+      const [value, label]
+      of sizes
+    ) {
+      const exists =
+        Array.from(
+          resolution.options
+        ).some(
+          option =>
+            option.value === value
+        );
+
+      if (!exists) {
+        const option =
+          document.createElement(
+            "option"
+          );
+
+        option.value = value;
+        option.textContent = label;
+
+        resolution.appendChild(
+          option
+        );
+      }
+    }
   }
 
   $("faceDetectBtn")?.addEventListener(
@@ -926,29 +1260,55 @@ function init() {
     () => run(createAllCards)
   );
 
-  const fileInput = $("faceFile");
-  const choose = $("faceChooseBtn");
-  const summary = $("faceFileSummary");
-  const thumb = $("faceFileThumb");
-  const detect = $("faceDetectBtn");
+  const fileInput =
+    $("faceFile");
+
+  const choose =
+    $("faceChooseBtn");
+
+  const summary =
+    $("faceFileSummary");
+
+  const thumb =
+    $("faceFileThumb");
+
+  const detect =
+    $("faceDetectBtn");
 
   function clearUpload() {
     faceGeneration++;
 
     reset();
 
-    if (fileInput) fileInput.value = "";
+    if (fileInput) {
+      fileInput.value = "";
+    }
 
     if (thumbnailURL) {
-      URL.revokeObjectURL(thumbnailURL);
+      URL.revokeObjectURL(
+        thumbnailURL
+      );
     }
 
     thumbnailURL = null;
 
-    if (thumb) thumb.removeAttribute("src");
-    if (summary) summary.hidden = true;
-    if (choose) choose.hidden = false;
-    if (detect) detect.disabled = true;
+    if (thumb) {
+      thumb.removeAttribute(
+        "src"
+      );
+    }
+
+    if (summary) {
+      summary.hidden = true;
+    }
+
+    if (choose) {
+      choose.hidden = false;
+    }
+
+    if (detect) {
+      detect.disabled = true;
+    }
   }
 
   choose?.addEventListener(
@@ -966,39 +1326,79 @@ function init() {
     clearUpload
   );
 
-  fileInput?.addEventListener("change", () => {
-    const file = fileInput.files?.[0];
+  fileInput?.addEventListener(
+    "change",
+    () => {
+      const file =
+        fileInput.files?.[0];
 
-    if (!file) return;
+      if (!file) return;
 
-    faceGeneration++;
-    reset();
+      faceGeneration++;
 
-    if (thumbnailURL) {
-      URL.revokeObjectURL(thumbnailURL);
+      reset();
+
+      if (thumbnailURL) {
+        URL.revokeObjectURL(
+          thumbnailURL
+        );
+      }
+
+      thumbnailURL =
+        URL.createObjectURL(
+          file
+        );
+
+      if (thumb) {
+        thumb.src =
+          thumbnailURL;
+      }
+
+      const name =
+        $("faceFileName");
+
+      if (name) {
+        name.textContent =
+          file.name;
+      }
+
+      const details =
+        $("faceFileDetails");
+
+      if (details) {
+        details.textContent =
+          `${(
+            file.size /
+            1024 /
+            1024
+          ).toFixed(1)} MB · Ready to detect`;
+      }
+
+      if (summary) {
+        summary.hidden = false;
+      }
+
+      if (choose) {
+        choose.hidden = true;
+      }
+
+      if (detect) {
+        detect.disabled = false;
+      }
+
+      message(
+        "Photo attached. Tap Detect faces to begin."
+      );
     }
-
-    thumbnailURL = URL.createObjectURL(file);
-
-    thumb.src = thumbnailURL;
-
-    $("faceFileName").textContent = file.name;
-
-    $("faceFileDetails").textContent =
-      `${(file.size / 1024 / 1024).toFixed(1)} MB · Ready to detect`;
-
-    summary.hidden = false;
-    choose.hidden = true;
-    detect.disabled = false;
-
-    message(
-      "Photo attached. Tap Detect faces to begin."
-    );
-  });
+  );
 
   $("faceZoom")?.addEventListener(
     "input",
-    event => setZoom(event.target.value)
+    event => {
+      setZoom(
+        event.target.value
+      );
+    }
   );
 
   $("faceResetCrop")?.addEventListener(
@@ -1012,7 +1412,10 @@ function init() {
   );
 }
 
-if (document.readyState === "loading") {
+if (
+  document.readyState ===
+  "loading"
+) {
   document.addEventListener(
     "DOMContentLoaded",
     init,
