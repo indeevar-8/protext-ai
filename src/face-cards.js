@@ -1,28 +1,19 @@
 
 /*
- * ProText AI — Face Studio 1.3
+ * ProText AI — Face Studio 1.5.2
  *
- * Fully offline face card processing.
- *
- * Features:
- * - Local MediaPipe face detection
- * - Multiple-face selection
- * - Single adjustable square crop
- * - Drag to move crop
- * - Drag corner handle to resize
- * - Zoom slider and crop reset
- * - Photo thumbnail, replace and remove
- * - Source-resolution quality indicator
- * - Progressive image resizing
- * - Memory-conscious sharpening
- * - 512, 1024, 2048 and 4096 PNG export
- *
- * MediaPipe model and WASM files must be hosted locally.
+ * Local MediaPipe face detection
+ * Adjustable face crop
+ * Original / Classic / Experimental AI processing
+ * Offline ONNX 3x super-resolution
+ * Original vs AI preview
+ * 512 / 1024 / 2048 / 4096 PNG export
  */
 
 import {
   checkAIModel,
-  inspectAIModel
+  inspectAIModel,
+  enhanceFaceCanvas
 } from "./face-ai-engine.js";
 
 import {
@@ -31,159 +22,35 @@ import {
 } from "@mediapipe/tasks-vision";
 
 const $ = id => document.getElementById(id);
-
 const BASE = import.meta.env.BASE_URL;
+
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_PIXELS = 20_000_000;
+const VERSION = "1.5.2";
 
 let detector = null;
 let photo = null;
 let sourceURL = null;
 let thumbnailURL = null;
-let faceGeneration = 0;
+let generation = 0;
 
 let faces = [];
 let selected = 0;
 let crop = null;
+let drag = null;
 
 let cardURLs = [];
 let busy = false;
-let drag = null;
-
-const FACE_STUDIO_VERSION = "1.5.0";
-
-const AI_MODEL_READY = false;
+let aiReady = false;
 
 let sourceInfo = {
   fileName: "",
-  fileSize: 0,
-  decodedWidth: 0,
-  decodedHeight: 0
+  fileSize: 0
 };
 
-function updateSourceDiagnostics() {
-  const details = $("faceFileDetails");
-
-  if (!details || !photo) return;
-
-  const w = photo.naturalWidth;
-  const h = photo.naturalHeight;
-
-  sourceInfo.decodedWidth = w;
-  sourceInfo.decodedHeight = h;
-
-  details.textContent =
-    `${sourceInfo.fileName} · ` +
-    `${w} × ${h} pixels · ` +
-    `${(sourceInfo.fileSize / 1048576).toFixed(2)} MB · ` +
-    `Face Studio ${FACE_STUDIO_VERSION}`;
-}
-
-
-function installEnhancementMode() {
-  if ($("faceEnhancementMode")) return;
-
-  const clarity = $("faceStrength");
-  if (!clarity) return;
-
-  const parent = clarity.parentElement;
-  if (!parent) return;
-
-  const label = document.createElement("label");
-  label.htmlFor = "faceEnhancementMode";
-  label.textContent = "Processing mode";
-  label.style.display = "block";
-  label.style.marginTop = "12px";
-  label.style.fontWeight = "600";
-
-  const select = document.createElement("select");
-  select.id = "faceEnhancementMode";
-  select.style.width = "100%";
-  select.style.marginTop = "6px";
-
-  select.add(new Option(
-    "Original Quality (no sharpening)", "original"
-  ));
-  select.add(new Option(
-    "Classic clarity (existing filters)", "classic"
-  ));
-
-  const aiOption = new Option(
-    "Offline AI Enhance (model not installed)", "ai"
-  );
-  aiOption.disabled = !AI_MODEL_READY;
-  select.add(aiOption);
-  select.value = "original";
-  const testButton = document.createElement("button");
-  testButton.type = "button";
-  testButton.textContent = "Check offline AI engine";
-  testButton.style.marginTop = "10px";
-
-  select.insertAdjacentElement("afterend", testButton);
-
-  testButton.addEventListener("click", async () => {
-    testButton.disabled = true;
-
-    try {
-      const check = await checkAIModel();
-
-      if (!check.available) {
-        message(
-          "Offline AI: " + check.reason
-        );
-        return;
-      }
-
-      const details = await inspectAIModel(
-        status => message(status)
-      );
-
-      console.info(
-        "Face Studio AI model:",
-        details
-      );
-
-      message(
-        "AI model loaded. Input/output compatibility still needs validation."
-      );
-    } catch (error) {
-      console.error(error);
-
-      message(
-        "AI engine error: " + error.message
-      );
-    } finally {
-      testButton.disabled = false;
-    }
-  });
-
-  const info = document.createElement("p");
-  info.id = "faceEnhancementInfo";
-  info.style.fontSize = "0.85rem";
-  info.style.opacity = "0.8";
-
-  parent.insertAdjacentElement("afterend", label);
-  label.insertAdjacentElement("afterend", select);
-  select.insertAdjacentElement("afterend", info);
-
-  function sync() {
-    const classic = select.value === "classic";
-    clarity.disabled = !classic;
-
-    info.textContent = classic
-      ? "Classic clarity uses the existing non-AI sharpening filter."
-      : select.value === "original"
-        ? "No sharpening or generated detail. Original photo pixels are used for export."
-        : "Offline AI model integration is pending validation on iPhone Safari.";
-  }
-
-  select.addEventListener("change", sync);
-  sync();
-}
-
 function message(text) {
-  const el = $("faceStatus");
-  if (el) el.textContent = text;
+  const element = $("faceStatus");
+  if (element) element.textContent = text;
 }
 
 function clamp(value, min, max) {
@@ -198,13 +65,55 @@ function imageHeight() {
   return photo?.naturalHeight || 0;
 }
 
+function newCanvas(size) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  return canvas;
+}
+
+function getContext(canvas, options = {}) {
+  const ctx = canvas.getContext("2d", options);
+
+  if (!ctx) {
+    throw new Error("Canvas processing is unavailable.");
+  }
+
+  return ctx;
+}
+
+function drawScaled(source, size) {
+  const canvas = newCanvas(size);
+  const ctx = getContext(canvas);
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(source, 0, 0, size, size);
+
+  return canvas;
+}
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (blob) resolve(blob);
+      else reject(new Error("PNG export failed."));
+    }, "image/png");
+  });
+}
+
+function releaseCanvas(canvas) {
+  if (!canvas) return;
+  canvas.width = 0;
+  canvas.height = 0;
+}
+
 function clearCards() {
   for (const url of cardURLs) {
     URL.revokeObjectURL(url);
   }
 
   cardURLs = [];
-
   $("faceCards")?.replaceChildren();
 }
 
@@ -234,6 +143,196 @@ function reset() {
   message("");
 }
 
+function updateSourceDiagnostics() {
+  const element = $("faceFileDetails");
+
+  if (!element || !photo) return;
+
+  element.textContent =
+    `${sourceInfo.fileName} · ` +
+    `${imageWidth()} × ${imageHeight()} pixels · ` +
+    `${(sourceInfo.fileSize / 1048576).toFixed(2)} MB · ` +
+    `Face Studio ${VERSION}`;
+}
+
+/* ----------------------------------------
+ * Processing mode
+ * ---------------------------------------- */
+
+function installEnhancementMode() {
+  if ($("faceEnhancementMode")) return;
+
+  const clarity = $("faceStrength");
+  if (!clarity?.parentElement) return;
+
+  const parent = clarity.parentElement;
+
+  const label = document.createElement("label");
+  label.htmlFor = "faceEnhancementMode";
+  label.textContent = "Processing mode";
+  label.style.display = "block";
+  label.style.marginTop = "12px";
+  label.style.fontWeight = "600";
+
+  const select = document.createElement("select");
+  select.id = "faceEnhancementMode";
+  select.style.width = "100%";
+  select.style.marginTop = "6px";
+
+  select.add(new Option(
+    "Original Quality (no sharpening)",
+    "original"
+  ));
+
+  select.add(new Option(
+    "Classic clarity (existing filters)",
+    "classic"
+  ));
+
+  const aiOption = new Option(
+    "Offline AI Enhance (experimental 3x)",
+    "ai"
+  );
+
+  aiOption.disabled = true;
+  select.add(aiOption);
+  select.value = "original";
+
+  const info = document.createElement("p");
+  info.id = "faceEnhancementInfo";
+  info.style.fontSize = "0.85rem";
+  info.style.opacity = "0.8";
+
+  parent.insertAdjacentElement("afterend", label);
+  label.insertAdjacentElement("afterend", select);
+  select.insertAdjacentElement("afterend", info);
+
+  function sync() {
+    const mode = select.value;
+    clarity.disabled = mode !== "classic";
+
+    if (mode === "classic") {
+      info.textContent =
+        "Classic clarity uses the existing sharpening filter.";
+    } else if (mode === "ai") {
+      info.textContent =
+        "Experimental offline 3x AI super-resolution. " +
+        "The model processes a 224-pixel input and produces " +
+        "a 672-pixel result. Facial details may change.";
+    } else {
+      info.textContent =
+        "Original photo pixels are used without sharpening.";
+    }
+  }
+
+  select.addEventListener("change", sync);
+  sync();
+
+  const testContainer = document.createElement("div");
+  testContainer.style.marginTop = "12px";
+
+  const testButton = document.createElement("button");
+  testButton.type = "button";
+  testButton.textContent = "Check offline AI engine";
+
+  testContainer.appendChild(testButton);
+
+  const anchor = parent.closest("fieldset") || parent;
+  anchor.insertAdjacentElement("afterend", testContainer);
+
+  testButton.addEventListener("click", async () => {
+    if (busy) return;
+
+    testButton.disabled = true;
+
+    const report = (stage, detail = "") => {
+      const text = `[AI TEST] ${stage} ${detail}`;
+      console.log(text);
+      message(text);
+    };
+
+    try {
+      report("1/4: Button clicked");
+
+      const check = await checkAIModel();
+
+      report(
+        "2/4: Model check",
+        JSON.stringify(check)
+      );
+
+      if (!check.available) {
+        throw new Error(check.reason);
+      }
+
+      report("3/4: Loading ONNX model");
+
+      const details = await inspectAIModel(
+        status => report("Loading", status)
+      );
+
+      console.log("Face Studio AI model:", details);
+
+      const input = details.inputMetadata?.[0];
+      const output = details.outputMetadata?.[0];
+
+      const compatible =
+        details.inputNames?.length === 1 &&
+        details.outputNames?.length === 1 &&
+        input?.type === "float32" &&
+        output?.type === "float32" &&
+        Array.isArray(input?.shape) &&
+        Array.isArray(output?.shape) &&
+        input.shape.length === 4 &&
+        output.shape.length === 4 &&
+        input.shape[1] === 1 &&
+        input.shape[2] === 224 &&
+        input.shape[3] === 224 &&
+        output.shape[1] === 1 &&
+        output.shape[2] === 672 &&
+        output.shape[3] === 672;
+
+      if (!compatible) {
+        throw new Error(
+          "This model does not match the expected " +
+          "224×224 to 672×672 single-channel format."
+        );
+      }
+
+      aiReady = true;
+      aiOption.disabled = false;
+
+      report(
+        "4/4: Model loaded",
+        "AI Enhance is now available."
+      );
+
+      sync();
+    } catch (error) {
+      console.error("[AI TEST] FAILED:", error);
+
+      aiReady = false;
+      aiOption.disabled = true;
+
+      if (select.value === "ai") {
+        select.value = "original";
+        sync();
+      }
+
+      report(
+        "FAILED:",
+        error?.message || String(error)
+      );
+    } finally {
+      testButton.disabled = false;
+    }
+  });
+}
+
+/* ----------------------------------------
+ * MediaPipe face detection
+ * ---------------------------------------- */
+
 async function getDetector() {
   if (detector) return detector;
 
@@ -259,10 +358,9 @@ async function getDetector() {
   return detector;
 }
 
-/*
- * Crop coordinates are stored in original
- * image pixels to preserve source quality.
- */
+/* ----------------------------------------
+ * Crop handling
+ * ---------------------------------------- */
 
 function normalizeCrop() {
   if (!crop || !photo) return;
@@ -276,104 +374,14 @@ function normalizeCrop() {
     Math.min(w, h)
   );
 
-  crop.x = clamp(
-    crop.x,
-    0,
-    w - crop.size
-  );
-
-  crop.y = clamp(
-    crop.y,
-    0,
-    h - crop.size
-  );
-}
-
-function automaticCrop(faceIndex) {
-  const box = faces[faceIndex]?.boundingBox;
-
-  if (!box || !photo) return;
-
-  const w = imageWidth();
-  const h = imageHeight();
-
-  const desiredSize = Math.max(
-    box.width * 1.45,
-    box.height * 1.55
-  );
-
-  const size = clamp(
-    desiredSize,
-    24,
-    Math.min(w, h)
-  );
-
-  const centerX =
-    box.originX + box.width / 2;
-
-  const centerY =
-    box.originY + box.height * 0.55;
-
-  crop = {
-    x: centerX - size / 2,
-    y: centerY - size / 2,
-    size
-  };
-
-  normalizeCrop();
-  updateCropUI();
-}
-
-function selectFace(index) {
-  if (!faces[index]) return;
-
-  selected = index;
-
-  automaticCrop(index);
-  drawFaceBoxes();
-  updatePersonPicker();
-  clearCards();
-
-  message(
-    `Face ${index + 1} selected. Adjust the crop, then generate the card.`
-  );
-}
-
-function drawFaceBoxes() {
-  // Only the editable crop frame is displayed.
-  $("faceBoxes")?.replaceChildren();
-}
-
-function updatePersonPicker() {
-  const host = $("facePersonPicker");
-  if (!host) return;
-
-  host.replaceChildren();
-  host.hidden = faces.length <= 1;
-
-  if (faces.length <= 1) return;
-
-  faces.forEach((face, index) => {
-    const button = document.createElement("button");
-
-    button.type = "button";
-    button.textContent = `Face ${index + 1}`;
-    button.className =
-      index === selected ? "active" : "";
-
-    button.addEventListener(
-      "click",
-      () => selectFace(index)
-    );
-
-    host.appendChild(button);
-  });
+  crop.x = clamp(crop.x, 0, w - crop.size);
+  crop.y = clamp(crop.y, 0, h - crop.size);
 }
 
 function updateQualityInfo() {
-  const el = $("faceCropQuality");
+  const element = $("faceCropQuality");
 
-  if (!el || !crop || !photo) return;
+  if (!element || !crop || !photo) return;
 
   const pixels = Math.round(crop.size);
   const exportSize = Number(
@@ -384,10 +392,9 @@ function updateQualityInfo() {
 
   const rating =
     pixels >= 800 ? "Good" :
-    pixels >= 350 ? "Moderate" :
-    "Low";
+    pixels >= 350 ? "Moderate" : "Low";
 
-  el.textContent =
+  element.textContent =
     `Source: ${imageWidth()} × ${imageHeight()} | ` +
     `Crop: ${pixels} × ${pixels} | ` +
     `Export: ${exportSize} × ${exportSize} | ` +
@@ -402,53 +409,46 @@ function updateCropUI() {
 
   normalizeCrop();
 
-  const w = imageWidth();
-  const h = imageHeight();
-
   frame.style.left =
-    `${crop.x / w * 100}%`;
+    `${crop.x / imageWidth() * 100}%`;
 
   frame.style.top =
-    `${crop.y / h * 100}%`;
+    `${crop.y / imageHeight() * 100}%`;
 
   frame.style.width =
-    `${crop.size / w * 100}%`;
+    `${crop.size / imageWidth() * 100}%`;
 
   frame.style.height =
-    `${crop.size / h * 100}%`;
+    `${crop.size / imageHeight() * 100}%`;
 
   updateQualityInfo();
   updateZoomControl();
 }
 
-function moveCrop(dx, dy) {
-  if (!crop) return;
+function automaticCrop(index) {
+  const box = faces[index]?.boundingBox;
 
-  crop.x += dx;
-  crop.y += dy;
+  if (!box || !photo) return;
 
-  normalizeCrop();
-  updateCropUI();
-}
+  const desiredSize = Math.max(
+    box.width * 1.45,
+    box.height * 1.55
+  );
 
-function resizeCrop(factor) {
-  if (!crop) return;
-
-  const centerX =
-    crop.x + crop.size / 2;
-
-  const centerY =
-    crop.y + crop.size / 2;
-
-  const newSize = clamp(
-    crop.size * factor,
+  const size = clamp(
+    desiredSize,
     24,
     Math.min(imageWidth(), imageHeight())
   );
 
-  crop.size = newSize;
-  crop.x = centerX - newSize / 2;
-  crop.y = centerY - newSize / 2;
+  const centerX = box.originX + box.width / 2;
+  const centerY = box.originY + box.height * 0.55;
+
+  crop = {
+    x: centerX - size / 2,
+    y: centerY - size / 2,
+    size
+  };
 
   normalizeCrop();
   updateCropUI();
@@ -464,14 +464,32 @@ function updateZoomControl() {
     imageHeight()
   );
 
-  const value =
-    100 *
-    Math.log(max / crop.size) /
-    Math.log(max / 24);
+  const denominator = Math.log(max / 24);
 
-  slider.value = String(
-    clamp(value, 0, 100)
+  const value = denominator > 0
+    ? 100 * Math.log(max / crop.size) / denominator
+    : 0;
+
+  slider.value = String(clamp(value, 0, 100));
+}
+
+function resizeCrop(factor) {
+  if (!crop || !photo) return;
+
+  const centerX = crop.x + crop.size / 2;
+  const centerY = crop.y + crop.size / 2;
+
+  crop.size = clamp(
+    crop.size * factor,
+    24,
+    Math.min(imageWidth(), imageHeight())
   );
+
+  crop.x = centerX - crop.size / 2;
+  crop.y = centerY - crop.size / 2;
+
+  normalizeCrop();
+  updateCropUI();
 }
 
 function setZoom(value) {
@@ -482,14 +500,50 @@ function setZoom(value) {
     imageHeight()
   );
 
-  const size =
-    max /
-    Math.pow(
-      max / 24,
-      Number(value) / 100
-    );
+  const size = max / Math.pow(
+    max / 24,
+    Number(value) / 100
+  );
 
   resizeCrop(size / crop.size);
+}
+
+function selectFace(index) {
+  if (!faces[index]) return;
+
+  selected = index;
+  automaticCrop(index);
+  updatePersonPicker();
+  clearCards();
+
+  message(
+    `Face ${index + 1} selected. Adjust the crop, then generate.`
+  );
+}
+
+function updatePersonPicker() {
+  const host = $("facePersonPicker");
+  if (!host) return;
+
+  host.replaceChildren();
+  host.hidden = faces.length <= 1;
+
+  if (faces.length <= 1) return;
+
+  faces.forEach((face, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = `Face ${index + 1}`;
+
+    button.className =
+      index === selected ? "active" : "";
+
+    button.addEventListener("click", () => {
+      if (!busy) selectFace(index);
+    });
+
+    host.appendChild(button);
+  });
 }
 
 function installStyles() {
@@ -523,6 +577,32 @@ function installStyles() {
       touch-action: none;
       cursor: nwse-resize;
     }
+
+    .face-ai-comparison {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 12px 0;
+      width: 100%;
+    }
+
+    .face-ai-comparison figure {
+      margin: 0;
+      min-width: 0;
+    }
+
+    .face-ai-comparison img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+
+    .face-ai-comparison figcaption {
+      font-size: .8rem;
+      text-align: center;
+      margin-top: 5px;
+    }
   `;
 
   document.head.appendChild(style);
@@ -555,119 +635,92 @@ function installCropEditor() {
   frame.appendChild(handle);
   stage.appendChild(frame);
 
-  frame.addEventListener(
-    "pointerdown",
-    event => {
-      if (!crop || !photo) return;
+  frame.addEventListener("pointerdown", event => {
+    if (!crop || !photo || busy) return;
 
-      if (
-        event.button !== undefined &&
-        event.button !== 0
-      ) {
-        return;
-      }
+    if (
+      event.button !== undefined &&
+      event.button !== 0
+    ) return;
 
-      event.preventDefault();
+    event.preventDefault();
 
-      const rect =
-        stage.getBoundingClientRect();
+    const rect = stage.getBoundingClientRect();
 
-      drag = {
-        id: event.pointerId,
-        mode:
-          event.target === handle
-            ? "resize"
-            : "move",
-        startX: event.clientX,
-        startY: event.clientY,
-        crop: { ...crop },
-        scaleX:
-          imageWidth() / rect.width,
-        scaleY:
-          imageHeight() / rect.height
-      };
+    drag = {
+      id: event.pointerId,
+      mode: event.target === handle
+        ? "resize"
+        : "move",
+      startX: event.clientX,
+      startY: event.clientY,
+      crop: { ...crop },
+      scaleX: imageWidth() / rect.width,
+      scaleY: imageHeight() / rect.height
+    };
 
-      frame.setPointerCapture(
-        event.pointerId
+    frame.setPointerCapture(event.pointerId);
+  });
+
+  frame.addEventListener("pointermove", event => {
+    if (!drag || drag.id !== event.pointerId) {
+      return;
+    }
+
+    const dx =
+      (event.clientX - drag.startX) *
+      drag.scaleX;
+
+    const dy =
+      (event.clientY - drag.startY) *
+      drag.scaleY;
+
+    if (drag.mode === "move") {
+      crop.x = drag.crop.x + dx;
+      crop.y = drag.crop.y + dy;
+      crop.size = drag.crop.size;
+    } else {
+      const delta = Math.max(dx, dy);
+
+      crop.x = drag.crop.x;
+      crop.y = drag.crop.y;
+
+      crop.size = clamp(
+        drag.crop.size + delta,
+        24,
+        Math.min(
+          imageWidth() - crop.x,
+          imageHeight() - crop.y
+        )
       );
     }
-  );
 
-  frame.addEventListener(
-    "pointermove",
-    event => {
-      if (
-        !drag ||
-        drag.id !== event.pointerId
-      ) {
-        return;
-      }
+    normalizeCrop();
+    updateCropUI();
+  });
 
-      const dx =
-        (event.clientX - drag.startX) *
-        drag.scaleX;
-
-      const dy =
-        (event.clientY - drag.startY) *
-        drag.scaleY;
-
-      if (drag.mode === "move") {
-        crop.x = drag.crop.x + dx;
-        crop.y = drag.crop.y + dy;
-        crop.size = drag.crop.size;
-      } else {
-        const delta = Math.max(dx, dy);
-
-        crop.x = drag.crop.x;
-        crop.y = drag.crop.y;
-
-        crop.size = clamp(
-          drag.crop.size + delta,
-          24,
-          Math.min(
-            imageWidth() - crop.x,
-            imageHeight() - crop.y
-          )
-        );
-      }
-
-      normalizeCrop();
-      updateCropUI();
-    }
-  );
-
-  const finishDrag = event => {
+  const finish = event => {
     if (drag?.id === event.pointerId) {
       drag = null;
     }
   };
 
-  frame.addEventListener(
-    "pointerup",
-    finishDrag
-  );
-
-  frame.addEventListener(
-    "pointercancel",
-    finishDrag
-  );
-
-  frame.addEventListener(
-    "lostpointercapture",
-    () => {
-      drag = null;
-    }
-  );
+  frame.addEventListener("pointerup", finish);
+  frame.addEventListener("pointercancel", finish);
+  frame.addEventListener("lostpointercapture", () => {
+    drag = null;
+  });
 }
 
+/* ----------------------------------------
+ * Photo detection
+ * ---------------------------------------- */
+
 async function detectFaces() {
-  const file =
-    $("faceFile")?.files?.[0];
+  const file = $("faceFile")?.files?.[0];
 
   if (!file) {
-    throw new Error(
-      "Choose a photo first."
-    );
+    throw new Error("Choose a photo first.");
   }
 
   const allowed = [
@@ -687,38 +740,19 @@ async function detectFaces() {
 
   reset();
 
-  const generation = faceGeneration;
+  const currentGeneration = generation;
 
-  sourceURL =
-    URL.createObjectURL(file);
-
+  sourceURL = URL.createObjectURL(file);
   photo = new Image();
   photo.src = sourceURL;
 
   const loadedPhoto = photo;
-
   await loadedPhoto.decode();
-  if (generation !== faceGeneration) {
-    return;
-  }
+
+  if (currentGeneration !== generation) return;
 
   sourceInfo.fileName = file.name;
   sourceInfo.fileSize = file.size;
-
-  updateSourceDiagnostics();
-
-  console.info("Face Studio diagnostics", {
-    version: FACE_STUDIO_VERSION,
-    device: navigator.userAgent,
-    fileName: file.name,
-    fileBytes: file.size,
-    decodedWidth: loadedPhoto.naturalWidth,
-    decodedHeight: loadedPhoto.naturalHeight
-  });
-
-  if (generation !== faceGeneration) {
-    return;
-  }
 
   if (
     imageWidth() * imageHeight() >
@@ -729,115 +763,66 @@ async function detectFaces() {
     );
   }
 
-  message(
-    "Detecting faces on this device..."
-  );
+  updateSourceDiagnostics();
 
-  const localDetector =
-    await getDetector();
+  console.info("Face Studio diagnostics", {
+    version: VERSION,
+    fileName: file.name,
+    decodedWidth: imageWidth(),
+    decodedHeight: imageHeight()
+  });
 
-  if (generation !== faceGeneration) {
-    return;
-  }
+  message("Detecting faces on this device...");
 
-  const result =
-    localDetector.detect(photo);
+  const localDetector = await getDetector();
 
-  faces = (
-    result.detections || []
-  ).filter(
-    detection =>
-      detection.boundingBox?.width > 0 &&
-      detection.boundingBox?.height > 0
+  if (currentGeneration !== generation) return;
+
+  const result = localDetector.detect(photo);
+
+  faces = (result.detections || []).filter(
+    item =>
+      item.boundingBox?.width > 0 &&
+      item.boundingBox?.height > 0
   );
 
   if (!faces.length) {
     message(
-      "No faces detected. Try a clearer photo with visible faces."
+      "No faces detected. Try a clearer photograph."
     );
     return;
   }
 
-  $("faceSourcePreview").src =
-    sourceURL;
-
+  $("faceSourcePreview").src = sourceURL;
   $("faceSelection").hidden = false;
 
   selected = 0;
+  $("faceBoxes")?.replaceChildren();
 
-  drawFaceBoxes();
   automaticCrop(0);
   updatePersonPicker();
 
   message(
-    `${faces.length} face(s) detected. Select a face and adjust its crop.`
+    `${faces.length} face(s) detected. Adjust the crop.`
   );
 }
 
-/*
- * Face Studio 1.3 rendering.
- *
- * Work at a maximum of 2048 pixels.
- * Apply sharpening before final 4K enlargement.
- *
- * This avoids creating several full-resolution
- * 4096px processing buffers.
- */
-
-function newCanvas(size) {
-  const canvas =
-    document.createElement("canvas");
-
-  canvas.width = size;
-  canvas.height = size;
-
-  return canvas;
-}
-
-function drawScaled(source, size) {
-  const next = newCanvas(size);
-
-  const ctx = next.getContext(
-    "2d",
-    { alpha: false }
-  );
-
-  if (!ctx) {
-    throw new Error(
-      "Canvas processing is unavailable."
-    );
-  }
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-
-  ctx.drawImage(
-    source,
-    0,
-    0,
-    size,
-    size
-  );
-
-  return next;
-}
+/* ----------------------------------------
+ * Original image rendering
+ * ---------------------------------------- */
 
 function renderWorkingCrop(outputSize) {
   if (!photo || !crop) {
-    throw new Error("Detect and select a face first.");
+    throw new Error(
+      "Detect and select a face first."
+    );
   }
 
   const sourceSize = crop.size;
 
-  // Draw directly from the original photo when possible.
-  // This preserves detail for 512, 1024, 2048 and 4096.
   if (sourceSize <= outputSize * 2) {
     const output = newCanvas(outputSize);
-    const ctx = output.getContext("2d");
-
-    if (!ctx) {
-      throw new Error("Canvas processing is unavailable.");
-    }
+    const ctx = getContext(output);
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
@@ -857,18 +842,13 @@ function renderWorkingCrop(outputSize) {
     return output;
   }
 
-  // Progressive downscaling for large source crops.
   let stepSize = Math.min(
     Math.ceil(sourceSize / 2),
     4096
   );
 
   let current = newCanvas(stepSize);
-  let ctx = current.getContext("2d");
-
-  if (!ctx) {
-    throw new Error("Canvas processing is unavailable.");
-  }
+  let ctx = getContext(current);
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
@@ -892,51 +872,35 @@ function renderWorkingCrop(outputSize) {
     );
 
     const next = drawScaled(current, nextSize);
-
-    current.width = 0;
-    current.height = 0;
+    releaseCanvas(current);
 
     current = next;
     stepSize = nextSize;
   }
 
-  if (stepSize === outputSize) {
-    return current;
-  }
+  if (stepSize === outputSize) return current;
 
   const output = drawScaled(current, outputSize);
-
-  current.width = 0;
-  current.height = 0;
+  releaseCanvas(current);
 
   return output;
 }
 
-/*
- * Tile-based sharpening.
- *
- * Reads only a small image strip at a time,
- * rather than a complete 4K RGBA pixel array.
- */
+/* ----------------------------------------
+ * Classic sharpening
+ * ---------------------------------------- */
 
-function enhance(canvas, strength) {
+function enhanceClassic(canvas, strength) {
   if (strength === "natural" || !strength) {
     return;
   }
 
-  // Preserve full 4K detail.
-  // Avoid a forced 2K sharpening/downscaling stage.
-  if (canvas.width > 2048) {
-    return;
-  }
+  // Preserve existing memory-conscious 4K behavior.
+  if (canvas.width > 2048) return;
 
-  const ctx = canvas.getContext("2d", {
+  const ctx = getContext(canvas, {
     willReadFrequently: true
   });
-
-  if (!ctx) {
-    throw new Error("Image enhancement is unavailable.");
-  }
 
   const w = canvas.width;
   const h = canvas.height;
@@ -993,39 +957,122 @@ function enhance(canvas, strength) {
   ctx.putImageData(result, 0, 0);
 }
 
-function canvasToBlob(canvas) {
-  return new Promise(
-    (resolve, reject) => {
-      canvas.toBlob(
-        blob => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(
-              new Error(
-                "PNG export failed."
-              )
-            );
-          }
-        },
-        "image/png"
-      );
-    }
-  );
-}
-
-async function renderCardBlob(size, strength) {
+async function renderStandardBlob(size, strength) {
   const output = renderWorkingCrop(size);
 
   try {
-    enhance(output, strength);
-
+    enhanceClassic(output, strength);
     return await canvasToBlob(output);
   } finally {
-    output.width = 0;
-    output.height = 0;
+    releaseCanvas(output);
   }
 }
+
+/* ----------------------------------------
+ * AI inference and comparison
+ * ---------------------------------------- */
+
+async function renderAIBlob(size) {
+  if (!aiReady) {
+    throw new Error(
+      "Check offline AI engine before using AI Enhance."
+    );
+  }
+
+  // The model has a fixed 224 x 224 input.
+  const input = renderWorkingCrop(224);
+
+  let enhanced = null;
+  let output = null;
+  let originalPreview = null;
+
+  try {
+    message("Running offline AI enhancement...");
+
+    enhanced = await enhanceFaceCanvas(
+      input,
+      status => message(status)
+    );
+
+    const aiPreviewBlob =
+      await canvasToBlob(enhanced);
+
+    originalPreview = renderWorkingCrop(672);
+
+    const originalPreviewBlob =
+      await canvasToBlob(originalPreview);
+
+    if (size === 672) {
+      output = enhanced;
+      enhanced = null;
+    } else {
+      output = drawScaled(enhanced, size);
+    }
+
+    message(
+      `Exporting AI-enhanced ${size} × ${size} PNG...`
+    );
+
+    const blob = await canvasToBlob(output);
+
+    return {
+      blob,
+      originalPreviewBlob,
+      aiPreviewBlob
+    };
+  } finally {
+    releaseCanvas(input);
+    releaseCanvas(enhanced);
+    releaseCanvas(output);
+    releaseCanvas(originalPreview);
+  }
+}
+
+function registerBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  cardURLs.push(url);
+  return url;
+}
+
+function createComparison(
+  originalBlob,
+  aiBlob
+) {
+  const container = document.createElement("div");
+  container.className = "face-ai-comparison";
+
+  const items = [
+    {
+      label: "Original (672px preview)",
+      blob: originalBlob
+    },
+    {
+      label: "AI Enhanced (672px)",
+      blob: aiBlob
+    }
+  ];
+
+  for (const item of items) {
+    const figure = document.createElement("figure");
+    const image = document.createElement("img");
+    const caption = document.createElement("figcaption");
+
+    image.src = registerBlob(item.blob);
+    image.alt = item.label;
+    image.loading = "lazy";
+
+    caption.textContent = item.label;
+
+    figure.append(image, caption);
+    container.appendChild(figure);
+  }
+
+  return container;
+}
+
+/* ----------------------------------------
+ * Face card creation
+ * ---------------------------------------- */
 
 async function makeCard(index) {
   if (!faces[index]) {
@@ -1039,96 +1086,78 @@ async function makeCard(index) {
   }
 
   const size = Number(
-    $("faceResolution")?.value ||
-    1024
+    $("faceResolution")?.value || 1024
   );
 
-  if (
-    ![
-      512,
-      1024,
-      2048,
-      4096
-    ].includes(size)
-  ) {
-    throw new Error(
-      "Invalid card resolution."
-    );
+  if (![512, 1024, 2048, 4096].includes(size)) {
+    throw new Error("Invalid card resolution.");
   }
 
-  const mode = $("faceEnhancementMode")?.value || "original";
+  const mode =
+    $("faceEnhancementMode")?.value || "original";
 
-  if (mode === "ai") {
-    throw new Error(
-      "Offline AI restoration is not installed yet."
-    );
-  }
-
-  const strength = mode === "classic"
-    ? ($("faceStrength")?.value || "balanced")
-    : "natural";
+  const strength =
+    mode === "classic"
+      ? ($("faceStrength")?.value || "balanced")
+      : "natural";
 
   message(
     `Rendering ${size} × ${size} face card locally...`
   );
 
-  const blob =
-    await renderCardBlob(
+  let blob;
+  let comparison = null;
+
+  if (mode === "ai") {
+    const result = await renderAIBlob(size);
+
+    blob = result.blob;
+
+    comparison = createComparison(
+      result.originalPreviewBlob,
+      result.aiPreviewBlob
+    );
+  } else {
+    blob = await renderStandardBlob(
       size,
       strength
     );
+  }
 
-  const url =
-    URL.createObjectURL(blob);
+  const url = registerBlob(blob);
 
-  cardURLs.push(url);
+  const item = document.createElement("div");
+  item.className = "face-card-item";
 
-  const item =
-    document.createElement("div");
-
-  item.className =
-    "face-card-item";
-
-  const preview =
-    document.createElement("img");
-
+  const preview = document.createElement("img");
   preview.src = url;
-  preview.alt =
-    `Face ${index + 1} card`;
+  preview.alt = `Face ${index + 1} card`;
 
-  const title =
-    document.createElement("strong");
-
+  const title = document.createElement("strong");
   title.textContent =
     `Face ${index + 1} — ${size} × ${size}`;
 
-  const download =
-    document.createElement("a");
-
+  const download = document.createElement("a");
   download.href = url;
 
   download.download =
-    `protext-face-${index + 1}-${size}.png`;
+    `protext-face-${index + 1}-${size}-${mode}.png`;
 
-  download.textContent =
-    "Save face card";
+  download.textContent = "Save face card";
 
-  item.append(
-    preview,
-    title,
-    download
-  );
+  item.append(preview, title);
 
-  $("faceCards").appendChild(
-    item
-  );
+  if (comparison) {
+    item.appendChild(comparison);
+  }
+
+  item.appendChild(download);
+  $("faceCards").appendChild(item);
 }
 
 async function createSelectedCard() {
   if (!faces.length || !crop) {
-    throw new Error(
-      "Detect a face first."
-    );
+    throw new Error("Detect a face first.");
   }
 
   clearCards();
@@ -1136,39 +1165,27 @@ async function createSelectedCard() {
   await makeCard(selected);
 
   message(
-    "Face card generated locally. You can adjust the crop and regenerate it."
+    "Face card generated locally. " +
+    "You can adjust the crop and regenerate."
   );
 }
 
 async function createAllCards() {
   if (!faces.length) {
-    throw new Error(
-      "Detect faces first."
-    );
+    throw new Error("Detect faces first.");
   }
 
   clearCards();
 
-  const originalSelected =
-    selected;
-
-  const originalCrop =
-    { ...crop };
+  const originalSelected = selected;
+  const originalCrop = { ...crop };
 
   try {
-    for (
-      let index = 0;
-      index < faces.length;
-      index++
-    ) {
+    for (let index = 0; index < faces.length; index++) {
       selected = index;
 
-      if (
-        index === originalSelected
-      ) {
-        crop = {
-          ...originalCrop
-        };
+      if (index === originalSelected) {
+        crop = { ...originalCrop };
       } else {
         automaticCrop(index);
       }
@@ -1176,13 +1193,9 @@ async function createAllCards() {
       await makeCard(index);
     }
   } finally {
-    selected =
-      originalSelected;
+    selected = originalSelected;
+    crop = originalCrop;
 
-    crop =
-      originalCrop;
-
-    drawFaceBoxes();
     updateCropUI();
     updatePersonPicker();
   }
@@ -1191,6 +1204,10 @@ async function createAllCards() {
     `${faces.length} face card(s) generated locally.`
   );
 }
+
+/* ----------------------------------------
+ * Action handling
+ * ---------------------------------------- */
 
 async function run(action) {
   if (busy) return;
@@ -1203,89 +1220,54 @@ async function run(action) {
     $("faceCreateAllBtn")
   ].filter(Boolean);
 
-  buttons.forEach(
-    button => {
-      button.disabled = true;
-    }
-  );
+  buttons.forEach(button => {
+    button.disabled = true;
+  });
 
   try {
     await action();
   } catch (error) {
-    console.error(
-      "Face Cards:",
-      error
-    );
+    console.error("Face Studio:", error);
 
     message(
       "Face processing failed: " +
-      (
-        error?.message ||
-        String(error)
-      )
+      (error?.message || String(error))
     );
   } finally {
     busy = false;
 
-    buttons.forEach(
-      button => {
-        button.disabled = false;
-      }
-    );
+    buttons.forEach(button => {
+      button.disabled = false;
+    });
   }
 }
 
+/* ----------------------------------------
+ * Initialization
+ * ---------------------------------------- */
+
 function init() {
-  if (!$("imageFaceOptions")) {
-    return;
-  }
+  if (!$("imageFaceOptions")) return;
 
   installStyles();
   installCropEditor();
   installEnhancementMode();
 
-  const resolution =
-    $("faceResolution");
-
-  // Preserve existing export options.
-  // Add 2K and 4K if not already present.
+  const resolution = $("faceResolution");
 
   if (resolution) {
     const sizes = [
-      [
-        "2048",
-        "2048 × 2048 (2K)"
-      ],
-      [
-        "4096",
-        "4096 × 4096 (4K, slower)"
-      ]
+      ["2048", "2048 × 2048 (2K)"],
+      ["4096", "4096 × 4096 (4K, slower)"]
     ];
 
-    for (
-      const [value, label]
-      of sizes
-    ) {
-      const exists =
-        Array.from(
-          resolution.options
-        ).some(
-          option =>
-            option.value === value
-        );
+    for (const [value, label] of sizes) {
+      const exists = Array.from(
+        resolution.options
+      ).some(option => option.value === value);
 
       if (!exists) {
-        const option =
-          document.createElement(
-            "option"
-          );
-
-        option.value = value;
-        option.textContent = label;
-
-        resolution.appendChild(
-          option
-        );
+        resolution.add(new Option(label, value));
       }
     }
   }
@@ -1305,166 +1287,110 @@ function init() {
     () => run(createAllCards)
   );
 
-  const fileInput =
-    $("faceFile");
-
-  const choose =
-    $("faceChooseBtn");
-
-  const summary =
-    $("faceFileSummary");
-
-  const thumb =
-    $("faceFileThumb");
-
-  const detect =
-    $("faceDetectBtn");
+  const fileInput = $("faceFile");
+  const choose = $("faceChooseBtn");
+  const summary = $("faceFileSummary");
+  const thumb = $("faceFileThumb");
+  const detect = $("faceDetectBtn");
 
   function clearUpload() {
-    faceGeneration++;
-
+    generation++;
     reset();
 
-    if (fileInput) {
-      fileInput.value = "";
-    }
+    if (fileInput) fileInput.value = "";
 
     if (thumbnailURL) {
-      URL.revokeObjectURL(
-        thumbnailURL
-      );
+      URL.revokeObjectURL(thumbnailURL);
+      thumbnailURL = null;
     }
-
-    thumbnailURL = null;
 
     if (thumb) {
-      thumb.removeAttribute(
-        "src"
-      );
+      thumb.removeAttribute("src");
     }
 
-    if (summary) {
-      summary.hidden = true;
-    }
-
-    if (choose) {
-      choose.hidden = false;
-    }
-
-    if (detect) {
-      detect.disabled = true;
-    }
+    if (summary) summary.hidden = true;
+    if (choose) choose.hidden = false;
+    if (detect) detect.disabled = true;
   }
 
-  choose?.addEventListener(
-    "click",
-    () => fileInput?.click()
-  );
+  choose?.addEventListener("click", () => {
+    if (!busy) fileInput?.click();
+  });
 
   $("faceReplaceBtn")?.addEventListener(
     "click",
-    () => fileInput?.click()
+    () => {
+      if (!busy) fileInput?.click();
+    }
   );
 
   $("faceRemoveBtn")?.addEventListener(
     "click",
-    clearUpload
-  );
-
-  fileInput?.addEventListener(
-    "change",
     () => {
-      const file =
-        fileInput.files?.[0];
-
-      if (!file) return;
-
-      faceGeneration++;
-
-      reset();
-
-      if (thumbnailURL) {
-        URL.revokeObjectURL(
-          thumbnailURL
-        );
-      }
-
-      thumbnailURL =
-        URL.createObjectURL(
-          file
-        );
-
-      if (thumb) {
-        thumb.src =
-          thumbnailURL;
-      }
-
-      const name =
-        $("faceFileName");
-
-      if (name) {
-        name.textContent =
-          file.name;
-      }
-
-      const details =
-        $("faceFileDetails");
-
-      if (details) {
-        details.textContent =
-          `${(
-            file.size /
-            1024 /
-            1024
-          ).toFixed(1)} MB · Ready to detect`;
-      }
-
-      if (summary) {
-        summary.hidden = false;
-      }
-
-      if (choose) {
-        choose.hidden = true;
-      }
-
-      if (detect) {
-        detect.disabled = false;
-      }
-
-      message(
-        "Photo attached. Tap Detect faces to begin."
-      );
+      if (!busy) clearUpload();
     }
   );
+
+  fileInput?.addEventListener("change", () => {
+    if (busy) return;
+
+    const file = fileInput.files?.[0];
+    if (!file) return;
+
+    generation++;
+    reset();
+
+    if (thumbnailURL) {
+      URL.revokeObjectURL(thumbnailURL);
+    }
+
+    thumbnailURL = URL.createObjectURL(file);
+
+    if (thumb) thumb.src = thumbnailURL;
+
+    const name = $("faceFileName");
+
+    if (name) name.textContent = file.name;
+
+    const details = $("faceFileDetails");
+
+    if (details) {
+      details.textContent =
+        `${(file.size / 1048576).toFixed(1)} MB · Ready to detect`;
+    }
+
+    if (summary) summary.hidden = false;
+    if (choose) choose.hidden = true;
+    if (detect) detect.disabled = false;
+
+    message(
+      "Photo attached. Tap Detect faces to begin."
+    );
+  });
 
   $("faceZoom")?.addEventListener(
     "input",
     event => {
-      setZoom(
-        event.target.value
-      );
+      if (!busy) setZoom(event.target.value);
     }
   );
 
   $("faceResetCrop")?.addEventListener(
     "click",
-    () => automaticCrop(selected)
+    () => {
+      if (!busy) automaticCrop(selected);
+    }
   );
 
-  window.addEventListener(
-    "pagehide",
-    reset
-  );
   $("faceResolution")?.addEventListener(
     "change",
     updateQualityInfo
   );
+
+  window.addEventListener("pagehide", reset);
 }
 
-if (
-  document.readyState ===
-  "loading"
-) {
+if (document.readyState === "loading") {
   document.addEventListener(
     "DOMContentLoaded",
     init,
